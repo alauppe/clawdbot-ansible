@@ -2,9 +2,32 @@
 - name: Include system tools installation tasks
   ansible.builtin.include_tasks: system-tools.yml
 
+- name: Validate VPN provider selection
+  ansible.builtin.assert:
+    that:
+      - vpn_provider in ['', 'tailscale', 'netbird']
+      - >-
+        not (vpn_provider == 'netbird'
+        and (tailscale_enabled | bool or tailscale_authkey | length > 0))
+      - vpn_provider == 'netbird' or netbird_setup_key | length == 0
+    fail_msg: >-
+      vpn_provider must be '', 'tailscale', or 'netbird', and credentials must
+      match the selected provider. Do not combine NetBird with Tailscale
+      settings or provide a NetBird key without vpn_provider=netbird.
+
+- name: Resolve effective VPN provider
+  ansible.builtin.set_fact:
+    openclaw_vpn_provider: >-
+      {{ vpn_provider if vpn_provider | length > 0
+         else ('tailscale' if tailscale_enabled | bool else '') }}
+
 - name: Include Tailscale installation tasks
   ansible.builtin.include_tasks: tailscale-linux.yml
-  when: tailscale_enabled | bool
+  when: openclaw_vpn_provider == 'tailscale'
+
+- name: Include NetBird installation tasks
+  ansible.builtin.include_tasks: netbird-linux.yml
+  when: openclaw_vpn_provider == 'netbird'
 
 - name: Include user creation tasks
   ansible.builtin.include_tasks: user.yml

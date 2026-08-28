@@ -1,0 +1,124 @@
+---
+# NetBird client installation for Debian and Ubuntu.
+
+- name: Install NetBird repository prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+
+- name: Add NetBird GPG key
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      curl -fsSL https://pkgs.netbird.io/debian/public.key | \
+        gpg --dearmor --output /usr/share/keyrings/netbird-archive-keyring.gpg
+    creates: /usr/share/keyrings/netbird-archive-keyring.gpg
+    executable: /bin/bash
+
+- name: Add NetBird apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/netbird.list
+    content: >-
+      deb [signed-by=/usr/share/keyrings/netbird-archive-keyring.gpg]
+      https://pkgs.netbird.io/debian stable main
+    owner: root
+    group: root
+    mode: '0644'
+  register: netbird_repository
+
+- name: Install NetBird
+  ansible.builtin.apt:
+    name: netbird
+    state: present
+    update_cache: "{{ netbird_repository.changed }}"
+
+- name: Enable and start NetBird
+  ansible.builtin.systemd:
+    name: netbird
+    enabled: true
+    state: started
+
+- name: Check whether NetBird has completed authentication
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - '15'
+      - netbird
+      - status
+      - --check
+      - ready
+  register: netbird_authenticated
+  changed_when: false
+  failed_when: false
+
+- name: Join NetBird with a setup key
+  ansible.builtin.command:
+    argv: >-
+      {{
+        [
+          'timeout',
+          netbird_connect_timeout | string,
+          'netbird',
+          'up',
+          '--setup-key=' ~ netbird_setup_key
+        ]
+        + (['--management-url=' ~ netbird_management_url]
+           if netbird_management_url | length > 0 else [])
+      }}
+  register: netbird_join
+  changed_when: netbird_join.rc == 0
+  failed_when: false
+  no_log: true
+  when:
+    - netbird_authenticated.rc != 0
+    - netbird_setup_key | length > 0
+
+- name: Fail clearly when the NetBird setup-key join fails
+  ansible.builtin.fail:
+    msg: >-
+      NetBird could not connect within {{ netbird_connect_timeout }} seconds.
+      Check the management URL, network reachability, and setup-key validity,
+      then rerun the playbook or connect manually with `sudo netbird up`.
+  when:
+    - netbird_join is defined
+    - not (netbird_join.skipped | default(false))
+    - (netbird_join.rc | default(1)) != 0
+
+- name: Verify NetBird readiness after setup-key join
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - '15'
+      - netbird
+      - status
+      - --check
+      - startup
+  register: netbird_ready_after_join
+  changed_when: false
+  failed_when: false
+  when:
+    - netbird_join is defined
+    - not (netbird_join.skipped | default(false))
+    - (netbird_join.rc | default(1)) == 0
+
+- name: Fail when NetBird does not become ready after joining
+  ansible.builtin.fail:
+    msg: >-
+      NetBird accepted the join command but did not become ready. Inspect
+      `sudo netbird status` and the netbird service before retrying.
+  when:
+    - netbird_ready_after_join is defined
+    - not (netbird_ready_after_join.skipped | default(false))
+    - (netbird_ready_after_join.rc | default(1)) != 0
+
+- name: Display manual NetBird connection guidance
+  ansible.builtin.debug:
+    msg: >-
+      NetBird is installed but not connected. Run `sudo netbird up`, or provide
+      netbird_setup_key for unattended registration.
+  when:
+    - netbird_authenticated.rc != 0
+    - netbird_setup_key | length == 0
