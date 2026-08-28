@@ -9,6 +9,16 @@ ci_test: false
 tailscale_enabled: false  # Set to true to install and configure Tailscale
 tailscale_authkey: ""  # Optional: set to auto-connect during installation
 
+# VPN provider selection. Leave empty to preserve the legacy tailscale_enabled
+# behavior, or select exactly one supported provider.
+vpn_provider: ""  # "tailscale", "netbird", or ""
+
+# NetBird settings
+# WARNING: Tasks using netbird_setup_key MUST set no_log: true
+netbird_setup_key: ""  # Optional: auto-connect during installation
+netbird_management_url: ""  # Optional: self-hosted management service URL
+netbird_connect_timeout: 60  # Seconds before an unattended join is stopped
+
 # Node.js version
 nodejs_version: "22.x"
 

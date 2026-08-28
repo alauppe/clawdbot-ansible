@@ -31,6 +31,7 @@ openclaw_ssh_keys:
   - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAB... admin@laptop"
 openclaw_repo_url: "https://github.com/YOUR_USERNAME/openclaw.git"
 openclaw_repo_branch: "main"
+vpn_provider: "tailscale"
 tailscale_authkey: "tskey-auth-xxxxxxxxxxxxx"
 nodejs_version: "22.x"
 ```
@@ -167,6 +168,15 @@ These variables only apply when `openclaw_install_mode: development`
   -e nodejs_version=20.x
   ```
 
+### VPN Configuration
+
+#### `vpn_provider`
+- **Type**: String (`""`, `tailscale`, or `netbird`)
+- **Default**: `""`
+- **Description**: Select one optional mesh VPN provider. Existing inventories
+  that set `tailscale_enabled: true` continue to select Tailscale when this
+  variable is empty.
+
 ### Tailscale Configuration
 
 #### `tailscale_authkey`
@@ -178,6 +188,24 @@ These variables only apply when `openclaw_install_mode: development`
   -e tailscale_authkey=tskey-auth-k1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6
   ```
 - **Get Key**: https://login.tailscale.com/admin/settings/keys
+
+### NetBird Configuration
+
+#### `netbird_setup_key`
+- **Type**: String
+- **Default**: `""` (empty - manual setup required)
+- **Description**: NetBird setup key for unattended registration. The value is
+  suppressed from Ansible logs.
+- **Example**:
+  ```bash
+  -e vpn_provider=netbird \
+  -e netbird_setup_key=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  ```
+
+#### `netbird_management_url`
+- **Type**: String
+- **Default**: `""` (NetBird Cloud)
+- **Description**: Management service URL for a self-hosted NetBird deployment.
 
 ### OS-Specific Settings
 
