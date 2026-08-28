@@ -19,7 +19,9 @@
   ansible.builtin.set_fact:
     openclaw_vpn_provider: >-
       {{ vpn_provider if vpn_provider | length > 0
-         else ('tailscale' if tailscale_enabled | bool else '') }}
+         else ('tailscale'
+               if tailscale_enabled | bool or tailscale_authkey | length > 0
+               else '') }}
 
 - name: Include Tailscale installation tasks
   ansible.builtin.include_tasks: tailscale-linux.yml
