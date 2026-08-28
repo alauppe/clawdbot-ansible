@@ -10,6 +10,7 @@ tailscale_enabled: false  # Set to true to install and configure Tailscale
 tailscale_authkey: ""  # Optional: set to auto-connect during installation
 tailscale_authkey_timeout: "60s"  # Bound unattended joins; Tailscale otherwise waits forever
 tailscale_ssh: false  # Opt in to Tailscale SSH when joining with an auth key
+tailscale_operator_enabled: false  # Opt in to let openclaw manage Tailscale and Serve
 
 # VPN provider selection. Leave empty to preserve the legacy tailscale_enabled
 # behavior, or select exactly one supported provider.

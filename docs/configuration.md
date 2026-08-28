@@ -202,6 +202,18 @@ Providing a non-empty auth key enables Tailscale installation automatically;
   -e tailscale_ssh=true
   ```
 
+#### `tailscale_operator_enabled`
+- **Type**: Boolean
+- **Default**: `false`
+- **Description**: Delegate Tailscale operator access to the OpenClaw service
+  account so it can manage Tailscale Serve without sudo. This grants broader
+  control of the local Tailscale daemon and is intentionally opt-in. The role
+  refuses to replace an operator already assigned to another account.
+- **Example**:
+  ```bash
+  -e tailscale_operator_enabled=true
+  ```
+
 ### NetBird Configuration
 
 #### `netbird_setup_key`
