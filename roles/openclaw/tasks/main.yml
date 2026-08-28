@@ -4,7 +4,7 @@
 
 - name: Include Tailscale installation tasks
   ansible.builtin.include_tasks: tailscale-linux.yml
-  when: tailscale_enabled | bool
+  when: tailscale_enabled | bool or tailscale_authkey | default('') | length > 0
 
 - name: Include user creation tasks
   ansible.builtin.include_tasks: user.yml

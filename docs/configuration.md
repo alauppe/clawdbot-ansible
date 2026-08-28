@@ -179,6 +179,19 @@ These variables only apply when `openclaw_install_mode: development`
   ```
 - **Get Key**: https://login.tailscale.com/admin/settings/keys
 
+Providing a non-empty auth key enables Tailscale installation automatically;
+`tailscale_enabled: true` is only required for interactive/manual setup.
+
+#### `tailscale_ssh`
+- **Type**: Boolean
+- **Default**: `false`
+- **Description**: Enable Tailscale SSH when joining with an auth key. This is
+  opt-in and still requires an appropriate tailnet SSH policy.
+- **Example**:
+  ```bash
+  -e tailscale_ssh=true
+  ```
+
 ### OS-Specific Settings
 
 These are automatically set based on the detected OS:
