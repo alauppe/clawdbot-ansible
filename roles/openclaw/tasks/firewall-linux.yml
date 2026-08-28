@@ -103,7 +103,7 @@
     port: '41641'
     proto: udp
     comment: 'Tailscale'
-  when: tailscale_enabled | bool
+  when: tailscale_enabled | bool or tailscale_operator_enabled | bool
 
 - name: Get default network interface
   ansible.builtin.shell:

@@ -4,10 +4,51 @@
 
 - name: Include Tailscale installation tasks
   ansible.builtin.include_tasks: tailscale-linux.yml
-  when: tailscale_enabled | bool
+  when: tailscale_enabled | bool or tailscale_operator_enabled | bool
 
 - name: Include user creation tasks
   ansible.builtin.include_tasks: user.yml
+
+- name: Read the current Tailscale operator
+  ansible.builtin.command: tailscale get operator
+  register: tailscale_operator_current
+  changed_when: false
+  failed_when: false
+  when: tailscale_operator_enabled | bool
+
+- name: Fail safely when the current Tailscale operator cannot be read
+  ansible.builtin.fail:
+    msg: >-
+      Unable to read the current Tailscale operator. No permission was changed.
+      Verify `sudo tailscale get operator` before retrying.
+  when:
+    - tailscale_operator_enabled | bool
+    - (tailscale_operator_current.rc | default(1)) != 0
+
+- name: Refuse to replace an existing Tailscale operator
+  ansible.builtin.fail:
+    msg: >-
+      Tailscale already delegates operator access to
+      '{{ tailscale_operator_current.stdout | trim }}'. No permission was
+      changed. Remove that delegation explicitly before granting it to
+      '{{ openclaw_user }}'.
+  when:
+    - tailscale_operator_enabled | bool
+    - (tailscale_operator_current.rc | default(1)) == 0
+    - tailscale_operator_current.stdout | default('') | trim | length > 0
+    - tailscale_operator_current.stdout | default('') | trim != openclaw_user
+
+- name: Grant the openclaw user Tailscale operator access
+  ansible.builtin.command:
+    argv:
+      - tailscale
+      - set
+      - "--operator={{ openclaw_user }}"
+  changed_when: true
+  when:
+    - tailscale_operator_enabled | bool
+    - (tailscale_operator_current.rc | default(1)) == 0
+    - tailscale_operator_current.stdout | default('') | trim | length == 0
 
 - name: Include Docker installation tasks
   ansible.builtin.include_tasks: docker-linux.yml
