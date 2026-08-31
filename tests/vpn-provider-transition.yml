@@ -141,6 +141,53 @@
           - netbird_effective_config.rc == 0
           - netbird_effective_management_url != netbird_management_url
 
+    # A login override is persisted before NetBird attempts control-plane
+    # authentication. Use an unreachable local endpoint to model an existing
+    # self-hosted profile without enrolling the hosted runner anywhere.
+    - name: Seed a disposable self-hosted NetBird management endpoint
+      ansible.builtin.command:
+        argv:
+          - timeout
+          - '5'
+          - netbird
+          - up
+          - --management-url=https://127.0.0.1:1
+      register: netbird_self_hosted_seed
+      changed_when: true
+      failed_when: false
+
+    - name: Stop the disposable NetBird connection attempt
+      ansible.builtin.command: netbird down
+      changed_when: true
+      failed_when: false
+
+    - name: Select NetBird Cloud over the existing self-hosted profile
+      ansible.builtin.set_fact:
+        netbird_management_url: ""
+        netbird_cloud_endpoint_drift_rejected: false
+        openclaw_selected_vpn_ready: true
+
+    - name: Exercise self-hosted to NetBird Cloud drift rejection
+      block:
+        - name: Compare the self-hosted profile to the Cloud default
+          ansible.builtin.include_role:
+            name: openclaw
+            tasks_from: netbird-endpoint-linux
+            apply:
+              check_mode: true
+      rescue:
+        - name: Record the expected NetBird Cloud drift refusal
+          ansible.builtin.set_fact:
+            netbird_cloud_endpoint_drift_rejected: true
+
+    - name: Assert clearing a self-hosted endpoint requires re-enrollment
+      ansible.builtin.assert:
+        that:
+          - netbird_cloud_endpoint_drift_rejected
+          - netbird_requested_management_url == 'https://api.netbird.io:443'
+          - netbird_requested_management_source == 'the NetBird Cloud default'
+          - netbird_effective_management_parts.hostname == '127.0.0.1'
+
     - name: Restore actual NetBird readiness for transition testing
       ansible.builtin.set_fact:
         openclaw_selected_vpn_ready: false
@@ -163,6 +210,55 @@
       ansible.builtin.include_role:
         name: openclaw
         tasks_from: tailscale-linux
+
+    - name: Record Tailscale service state before its auth-key dry run
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - tailscaled.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: tailscale_state_before_check
+      changed_when: false
+
+    - name: Supply a placeholder auth key for check-mode coverage
+      ansible.builtin.set_fact:
+        tailscale_authkey: tskey-auth-check-mode-placeholder
+
+    - name: Exercise Tailscale auth-key provisioning in check mode
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: tailscale-linux
+        apply:
+          check_mode: true
+
+    - name: Record Tailscale service state after its auth-key dry run
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - tailscaled.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: tailscale_state_after_check
+      changed_when: false
+
+    - name: Assert Tailscale probes run and auth-key login stays dry
+      ansible.builtin.assert:
+        that:
+          - not (tailscale_status_linux.skipped | default(false))
+          - tailscale_status_linux.rc is defined
+          - tailscale_backend_state == 'NeedsLogin'
+          - tailscale_join is defined
+          - tailscale_join.skipped | default(false)
+          - tailscale_state_after_check.stdout == tailscale_state_before_check.stdout
+
+    - name: Clear the placeholder Tailscale auth key
+      ansible.builtin.set_fact:
+        tailscale_authkey: ""
 
     - name: Attempt NetBird to unready Tailscale transition
       ansible.builtin.include_role:

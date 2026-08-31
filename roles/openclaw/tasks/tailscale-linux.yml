@@ -45,6 +45,7 @@
 - name: Check if Tailscale is already connected (Linux)
   ansible.builtin.command: tailscale status --json
   register: tailscale_status_linux
+  check_mode: false
   changed_when: false
   failed_when: false
 
@@ -56,7 +57,7 @@
 # NeedsLogin and Stopped. Parse BackendState instead of treating rc=0 as joined.
 - name: Parse Tailscale backend state
   when:
-    - tailscale_status_linux.rc == 0
+    - (tailscale_status_linux.rc | default(1)) == 0
     - tailscale_status_linux.stdout | default('') | trim | length > 0
   block:
     - name: Read BackendState from Tailscale status JSON
@@ -108,6 +109,7 @@
 - name: Refresh Tailscale status after auth-key join
   ansible.builtin.command: tailscale status --json
   register: tailscale_status_after_join
+  check_mode: false
   changed_when: false
   failed_when: false
   when:

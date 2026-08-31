@@ -19,7 +19,7 @@ vpn_provider: ""  # "tailscale", "netbird", or ""
 # NetBird settings
 # WARNING: Tasks using netbird_setup_key MUST set no_log: true
 netbird_setup_key: ""  # Optional: auto-connect during installation
-netbird_management_url: ""  # Optional: self-hosted management service URL
+netbird_management_url: ""  # Empty selects NetBird Cloud; otherwise self-hosted URL
 netbird_connect_timeout: 60  # Seconds before an unattended join is stopped
 
 # Node.js version

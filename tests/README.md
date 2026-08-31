@@ -46,8 +46,9 @@ fresh `ubuntu-24.04` hosted runners. Do not run these on a persistent host:
 - `vpn-provider-transition.yml` installs both real VPN clients, exercises both
   provider-switch directions, verifies service and UFW convergence, preserves
   unconfigured existing providers, renders self-hosted manual guidance, rejects
-  connected-client management endpoint drift, and repeats reconciliation for
-  idempotency.
+  connected-client management endpoint drift (including self-hosted to Cloud),
+  exercises auth-key and status probes in check mode, and repeats reconciliation
+  for idempotency.
 - `tailscale-operator-boundary.yml` uses a real Tailscale daemon and the
   production sudoers template to prove grant, revocation, preservation of a
   different operator, stopped-daemon reconciliation, and rejection of a
@@ -68,8 +69,8 @@ Neither test enrolls the runner in a private network or requires credentials.
 | Docker CE install | ❌ No | Needs Docker-in-Docker |
 | UFW / iptables | ⚠️ Partial | Hosted VPN tests verify the Tailscale rule; Docker-chain tests still need kernel access |
 | fail2ban / systemd | ❌ No | Needs running systemd |
-| Tailscale | ✅ Hosted | Real package, daemon, provider transitions, and operator boundary |
-| NetBird | ✅ Hosted | Real package, daemon, both provider transitions, check-mode probes, rendered self-hosted guidance, and endpoint-drift refusal |
+| Tailscale | ✅ Hosted | Real package, daemon, provider transitions, auth-key check mode, and operator boundary |
+| NetBird | ✅ Hosted | Real package, daemon, both provider transitions, check-mode probes, rendered self-hosted guidance, and Cloud/self-hosted endpoint-drift refusal |
 | OpenClaw app install | ✅ Yes | Latest npm release and version check |
 | Idempotency | ✅ Yes | Second run must have 0 changes |
 

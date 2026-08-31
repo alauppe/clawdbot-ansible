@@ -24,10 +24,21 @@
       managementUrl, and rerun the playbook.
   when: (netbird_effective_config.rc | default(1)) != 0
 
+- name: Resolve the requested NetBird management endpoint
+  ansible.builtin.set_fact:
+    netbird_requested_management_url: >-
+      {{ netbird_management_url
+         if netbird_management_url | length > 0
+         else 'https://api.netbird.io:443' }}
+    netbird_requested_management_source: >-
+      {{ 'netbird_management_url'
+         if netbird_management_url | length > 0
+         else 'the NetBird Cloud default' }}
+
 - name: Parse requested and effective NetBird management endpoints
   ansible.builtin.set_fact:
     netbird_requested_management_parts: >-
-      {{ netbird_management_url | ansible.builtin.urlsplit }}
+      {{ netbird_requested_management_url | ansible.builtin.urlsplit }}
     netbird_effective_management_url: >-
       {{ (netbird_effective_config.stdout | from_json).managementUrl
          | default('') }}
@@ -61,9 +72,10 @@
   ansible.builtin.fail:
     msg: >-
       NetBird is connected to '{{ netbird_effective_management_url }}', but
-      netbird_management_url requests '{{ netbird_management_url }}'. Refusing
-      to move an enrolled peer between management services automatically. Run
-      `sudo netbird down`, deliberately re-enroll it with
+      {{ netbird_requested_management_source }} requests
+      '{{ netbird_requested_management_url }}'. Refusing to move an enrolled
+      peer between management services automatically. Run `sudo netbird down`,
+      deliberately re-enroll it with
       `{{ openclaw_vpn_connect_command }}` and the required credentials, then
       rerun the playbook.
   when: not (netbird_management_endpoint_matches | bool)

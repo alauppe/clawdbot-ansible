@@ -142,8 +142,6 @@
              and not (netbird_ready_after_join.skipped | default(false))
              and (netbird_ready_after_join.rc | default(1)) == 0) }}
 
-- name: Reject management endpoint drift on a connected NetBird client
+- name: Reject management endpoint drift on a ready NetBird client
   ansible.builtin.include_tasks: netbird-endpoint-linux.yml
-  when:
-    - openclaw_selected_vpn_ready | bool
-    - netbird_management_url | length > 0
+  when: openclaw_selected_vpn_ready | bool

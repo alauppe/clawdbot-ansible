@@ -337,7 +337,7 @@ Edit `roles/openclaw/defaults/main.yml` before running the playbook.
 | `tailscale_ssh` | `false` | Enable Tailscale SSH when joining with an auth key |
 | `tailscale_operator_enabled` | `false` | Let the openclaw user manage Tailscale and Serve; opt-out revokes its grant |
 | `netbird_setup_key` | `""` | NetBird setup key for auto-connect |
-| `netbird_management_url` | `""` | Self-hosted NetBird management URL |
+| `netbird_management_url` | `""` | NetBird Cloud when empty, or a self-hosted management URL |
 | `nodejs_version` | `22.x` | Node.js version to install |
 
 See [`roles/openclaw/defaults/main.yml`](roles/openclaw/defaults/main.yml) for the complete list.
