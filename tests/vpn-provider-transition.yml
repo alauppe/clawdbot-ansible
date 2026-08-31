@@ -58,6 +58,14 @@
           - (netbird_authenticated.rc | default(0)) != 0
           - not (openclaw_selected_vpn_ready | bool)
 
+    - name: Seed an invalid NetBird keyring from an interrupted installation
+      ansible.builtin.copy:
+        dest: /usr/share/keyrings/netbird-archive-keyring.gpg
+        content: interrupted-download
+        owner: root
+        group: root
+        mode: '0644'
+
     - name: Select NetBird for initial provisioning
       ansible.builtin.set_fact:
         openclaw_vpn_provider: netbird
@@ -67,6 +75,22 @@
       ansible.builtin.include_role:
         name: openclaw
         tasks_from: netbird-linux
+
+    - name: Validate the repaired NetBird signing key
+      ansible.builtin.command:
+        argv:
+          - gpg
+          - --batch
+          - --show-keys
+          - /usr/share/keyrings/netbird-archive-keyring.gpg
+      register: repaired_netbird_signing_key
+      changed_when: false
+
+    - name: Assert the interrupted keyring was repaired
+      ansible.builtin.assert:
+        that:
+          - repaired_netbird_signing_key.rc == 0
+          - netbird_signing_key.rc != 0
 
     - name: Assert self-hosted manual setup keeps its management endpoint
       ansible.builtin.assert:
@@ -136,6 +160,41 @@
             'sudo netbird up
             --management-url=https://netbird.example.test'
             in (rendered_welcome_message.content | b64decode)
+
+    - name: Remove the welcome-rendering injection marker
+      ansible.builtin.file:
+        path: /tmp/openclaw-netbird-welcome-injection
+        state: absent
+
+    - name: Configure a literal-safety welcome fixture
+      ansible.builtin.set_fact:
+        openclaw_vpn_connect_command: >-
+          sudo netbird up
+          --management-url='https://netbird.example.test/$(touch${IFS}/tmp/openclaw-netbird-welcome-injection)'
+
+    - name: Render the literal-safety welcome fixture
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: welcome-message-linux
+
+    - name: Source the literal-safety welcome fixture
+      ansible.builtin.command:
+        argv:
+          - /bin/bash
+          - "{{ openclaw_home }}/.openclaw-welcome"
+      register: literal_safe_welcome
+      changed_when: false
+
+    - name: Check whether welcome rendering executed configuration text
+      ansible.builtin.stat:
+        path: /tmp/openclaw-netbird-welcome-injection
+      register: welcome_injection_marker
+
+    - name: Assert the NetBird command was rendered as literal text
+      ansible.builtin.assert:
+        that:
+          - not welcome_injection_marker.stat.exists
+          - openclaw_vpn_connect_command in literal_safe_welcome.stdout
 
     - name: Default endpoint-drift rejection observation
       ansible.builtin.set_fact:

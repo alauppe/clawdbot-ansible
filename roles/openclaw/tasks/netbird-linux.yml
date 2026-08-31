@@ -143,14 +143,33 @@
       - gnupg
     state: present
 
-- name: Add NetBird GPG key
+- name: Validate the installed NetBird GPG key
+  ansible.builtin.command:
+    argv:
+      - gpg
+      - --batch
+      - --show-keys
+      - /usr/share/keyrings/netbird-archive-keyring.gpg
+  register: netbird_signing_key
+  check_mode: false
+  changed_when: false
+  failed_when: false
+
+- name: Install the NetBird GPG key atomically
   ansible.builtin.shell:
     cmd: |
-      set -o pipefail
+      set -o errexit -o nounset -o pipefail
+      netbird_keyring_tmp="$(
+        mktemp /usr/share/keyrings/.netbird-archive-keyring.gpg.XXXXXX
+      )"
+      trap 'rm -f "$netbird_keyring_tmp"' EXIT
       curl -fsSL https://pkgs.netbird.io/debian/public.key | \
-        gpg --dearmor --output /usr/share/keyrings/netbird-archive-keyring.gpg
-    creates: /usr/share/keyrings/netbird-archive-keyring.gpg
+        gpg --dearmor > "$netbird_keyring_tmp"
+      chmod 0644 "$netbird_keyring_tmp"
+      mv -- "$netbird_keyring_tmp" \
+        /usr/share/keyrings/netbird-archive-keyring.gpg
     executable: /bin/bash
+  when: (netbird_signing_key.rc | default(1)) != 0
 
 - name: Add NetBird apt repository
   ansible.builtin.copy:
