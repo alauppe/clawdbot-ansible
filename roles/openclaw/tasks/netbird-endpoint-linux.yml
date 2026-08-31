@@ -37,6 +37,9 @@
 
 - name: Parse requested and effective NetBird management endpoints
   ansible.builtin.set_fact:
+    netbird_reenrollment_command: >-
+      sudo netbird up
+      --management-url={{ netbird_requested_management_url | quote }}
     netbird_requested_management_parts: >-
       {{ netbird_requested_management_url | ansible.builtin.urlsplit }}
     netbird_effective_management_url: >-
@@ -76,6 +79,6 @@
       '{{ netbird_requested_management_url }}'. Refusing to move an enrolled
       peer between management services automatically. Run `sudo netbird down`,
       deliberately re-enroll it with
-      `{{ openclaw_vpn_connect_command }}` and the required credentials, then
+      `{{ netbird_reenrollment_command }}` and the required credentials, then
       rerun the playbook.
   when: not (netbird_management_endpoint_matches | bool)

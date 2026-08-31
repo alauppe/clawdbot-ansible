@@ -179,6 +179,8 @@
         - name: Record the expected NetBird Cloud drift refusal
           ansible.builtin.set_fact:
             netbird_cloud_endpoint_drift_rejected: true
+            netbird_cloud_endpoint_drift_message: >-
+              {{ ansible_failed_result.msg | default('') }}
 
     - name: Assert clearing a self-hosted endpoint requires re-enrollment
       ansible.builtin.assert:
@@ -187,6 +189,10 @@
           - netbird_requested_management_url == 'https://api.netbird.io:443'
           - netbird_requested_management_source == 'the NetBird Cloud default'
           - netbird_effective_management_parts.hostname == '127.0.0.1'
+          - >-
+            'sudo netbird up
+            --management-url=https://api.netbird.io:443'
+            in netbird_cloud_endpoint_drift_message
 
     - name: Restore actual NetBird readiness for transition testing
       ansible.builtin.set_fact:
