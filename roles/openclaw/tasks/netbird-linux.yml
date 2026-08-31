@@ -69,13 +69,31 @@
       {{ netbird_profile_candidates.results
          | map(attribute='stat.exists') | max }}
 
+- name: Check whether the NetBird service is already running
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - netbird.service
+  register: netbird_service_before_provisioning
+  check_mode: false
+  changed_when: false
+  failed_when: false
+
+- name: Determine whether persisted endpoint validation is required
+  ansible.builtin.set_fact:
+    netbird_persisted_endpoint_validation_required: >-
+      {{ netbird_profile_preexisting | bool
+         and ((netbird_service_before_provisioning.rc | default(1)) != 0
+              or netbird_setup_key | length > 0) }}
+
 - name: Read the persisted NetBird profile before any service activity
   ansible.builtin.slurp:
     src: "{{ netbird_persisted_profile_path }}"
   register: netbird_persisted_profile
   check_mode: false
   no_log: true
-  when: netbird_profile_preexisting | bool
+  when: netbird_persisted_endpoint_validation_required | bool
 
 - name: Parse the persisted NetBird management endpoint fields
   ansible.builtin.set_fact:
@@ -83,7 +101,7 @@
       {{ ((netbird_persisted_profile.content | b64decode | from_json)
           ['ManagementURL']) | default({}) }}
   no_log: true
-  when: netbird_profile_preexisting | bool
+  when: netbird_persisted_endpoint_validation_required | bool
 
 - name: Read the persisted NetBird management endpoint
   ansible.builtin.set_fact:
@@ -94,22 +112,22 @@
               ~ netbird_persisted_management_parts.get('Host', '')
               ~ netbird_persisted_management_parts.get('Path', '') }}
   no_log: true
-  when: netbird_profile_preexisting | bool
+  when: netbird_persisted_endpoint_validation_required | bool
 
 - name: Fail safely when the persisted NetBird endpoint is unavailable
   ansible.builtin.fail:
     msg: >-
       NetBird has an existing profile, but its persisted management endpoint
-      could not be read. The service was not started and no control-plane
+      could not be read. No service state was changed and no control-plane
       migration was attempted. Inspect '{{ netbird_persisted_profile_path }}'
       and rerun the playbook.
   when:
-    - netbird_profile_preexisting | bool
+    - netbird_persisted_endpoint_validation_required | bool
     - netbird_effective_management_url | default('') | length == 0
 
 - name: Validate the persisted endpoint before any service activity
   ansible.builtin.include_tasks: netbird-endpoint-compare-linux.yml
-  when: netbird_profile_preexisting | bool
+  when: netbird_persisted_endpoint_validation_required | bool
 
 - name: Check whether NetBird is already installed
   ansible.builtin.stat:
