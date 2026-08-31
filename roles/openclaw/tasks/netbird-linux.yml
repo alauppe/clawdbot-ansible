@@ -169,6 +169,7 @@
       mv -- "$netbird_keyring_tmp" \
         /usr/share/keyrings/netbird-archive-keyring.gpg
     executable: /bin/bash
+  changed_when: true
   when: (netbird_signing_key.rc | default(1)) != 0
 
 - name: Add NetBird apt repository
