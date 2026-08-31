@@ -57,6 +57,7 @@
       - --check
       - startup
   register: netbird_authenticated
+  check_mode: false
   changed_when: false
   failed_when: false
 
@@ -79,7 +80,7 @@
   failed_when: false
   no_log: true
   when:
-    - netbird_authenticated.rc != 0
+    - (netbird_authenticated.rc | default(1)) != 0
     - netbird_setup_key | length > 0
 
 - name: Fail clearly when the NetBird setup-key join fails
@@ -104,6 +105,7 @@
       - --check
       - startup
   register: netbird_ready_after_join
+  check_mode: false
   changed_when: false
   failed_when: false
   when:
@@ -129,13 +131,13 @@
       unattended registration.
   register: netbird_manual_guidance
   when:
-    - netbird_authenticated.rc != 0
+    - (netbird_authenticated.rc | default(1)) != 0
     - netbird_setup_key | length == 0
 
 - name: Record whether selected NetBird is ready
   ansible.builtin.set_fact:
     openclaw_selected_vpn_ready: >-
-      {{ netbird_authenticated.rc == 0
+      {{ (netbird_authenticated.rc | default(1)) == 0
          or (netbird_ready_after_join is defined
              and not (netbird_ready_after_join.skipped | default(false))
              and (netbird_ready_after_join.rc | default(1)) == 0) }}

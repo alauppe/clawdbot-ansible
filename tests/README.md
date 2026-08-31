@@ -69,7 +69,7 @@ Neither test enrolls the runner in a private network or requires credentials.
 | UFW / iptables | ⚠️ Partial | Hosted VPN tests verify the Tailscale rule; Docker-chain tests still need kernel access |
 | fail2ban / systemd | ❌ No | Needs running systemd |
 | Tailscale | ✅ Hosted | Real package, daemon, provider transitions, and operator boundary |
-| NetBird | ✅ Hosted | Real package, daemon, both provider transitions, rendered self-hosted guidance, and endpoint-drift refusal |
+| NetBird | ✅ Hosted | Real package, daemon, both provider transitions, check-mode probes, rendered self-hosted guidance, and endpoint-drift refusal |
 | OpenClaw app install | ✅ Yes | Latest npm release and version check |
 | Idempotency | ✅ Yes | Second run must have 0 changes |
 

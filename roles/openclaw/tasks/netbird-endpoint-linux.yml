@@ -11,6 +11,7 @@
       - debug
       - config
   register: netbird_effective_config
+  check_mode: false
   changed_when: false
   failed_when: false
 
@@ -21,7 +22,7 @@
       verified. No control-plane migration was attempted. Update the NetBird
       client so `sudo netbird debug config` is available, verify its
       managementUrl, and rerun the playbook.
-  when: netbird_effective_config.rc != 0
+  when: (netbird_effective_config.rc | default(1)) != 0
 
 - name: Parse requested and effective NetBird management endpoints
   ansible.builtin.set_fact:

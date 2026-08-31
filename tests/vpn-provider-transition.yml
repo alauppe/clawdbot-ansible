@@ -59,6 +59,44 @@
             --management-url=https://netbird.example.test'
             in netbird_manual_guidance.msg
 
+    - name: Record NetBird service state before its dry run
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - netbird.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: netbird_state_before_check
+      changed_when: false
+
+    - name: Exercise configured NetBird provisioning in check mode
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: netbird-linux
+        apply:
+          check_mode: true
+
+    - name: Record NetBird service state after its dry run
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - netbird.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: netbird_state_after_check
+      changed_when: false
+
+    - name: Assert NetBird probes run without mutating the dry-run host
+      ansible.builtin.assert:
+        that:
+          - not (netbird_authenticated.skipped | default(false))
+          - netbird_authenticated.rc is defined
+          - netbird_state_after_check.stdout == netbird_state_before_check.stdout
+
     - name: Render the production welcome message
       ansible.builtin.include_role:
         name: openclaw
@@ -88,6 +126,8 @@
           ansible.builtin.include_role:
             name: openclaw
             tasks_from: netbird-endpoint-linux
+            apply:
+              check_mode: true
       rescue:
         - name: Record the expected endpoint-drift refusal
           ansible.builtin.set_fact:
@@ -97,6 +137,8 @@
       ansible.builtin.assert:
         that:
           - netbird_endpoint_drift_rejected
+          - not (netbird_effective_config.skipped | default(false))
+          - netbird_effective_config.rc == 0
           - netbird_effective_management_url != netbird_management_url
 
     - name: Restore actual NetBird readiness for transition testing
