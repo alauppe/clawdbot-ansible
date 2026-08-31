@@ -331,11 +331,11 @@ Edit `roles/openclaw/defaults/main.yml` before running the playbook.
 | `openclaw_ssh_keys` | `[]` | List of SSH public keys |
 | `openclaw_repo_url` | `https://github.com/openclaw/openclaw.git` | Git repository (dev mode) |
 | `openclaw_repo_branch` | `main` | Git branch (dev mode) |
-| `vpn_provider` | `""` | Optional `tailscale` or `netbird` provider |
+| `vpn_provider` | `""` | Optional `tailscale` or `netbird`; empty preserves existing VPN state |
 | `tailscale_enabled` | `false` | Legacy switch for Tailscale |
 | `tailscale_authkey` | `""` | Tailscale auth key for auto-connect |
 | `tailscale_ssh` | `false` | Enable Tailscale SSH when joining with an auth key |
-| `tailscale_operator_enabled` | `false` | Let the openclaw user manage Tailscale and Serve |
+| `tailscale_operator_enabled` | `false` | Let the openclaw user manage Tailscale and Serve; opt-out revokes its grant |
 | `netbird_setup_key` | `""` | NetBird setup key for auto-connect |
 | `netbird_management_url` | `""` | Self-hosted NetBird management URL |
 | `nodejs_version` | `22.x` | Node.js version to install |

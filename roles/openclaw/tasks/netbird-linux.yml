@@ -1,6 +1,12 @@
 ---
 # NetBird client installation for Debian and Ubuntu.
 
+- name: Build the manual NetBird connection command
+  ansible.builtin.set_fact:
+    openclaw_vpn_connect_command: >-
+      sudo netbird up{{ ' --management-url=' ~ (netbird_management_url | quote)
+      if netbird_management_url | length > 0 else '' }}
+
 - name: Install NetBird repository prerequisites
   ansible.builtin.apt:
     name:
@@ -41,7 +47,7 @@
     enabled: true
     state: started
 
-- name: Check whether NetBird has completed authentication
+- name: Check whether NetBird is connected and ready
   ansible.builtin.command:
     argv:
       - timeout
@@ -49,7 +55,7 @@
       - netbird
       - status
       - --check
-      - ready
+      - startup
   register: netbird_authenticated
   changed_when: false
   failed_when: false
@@ -81,7 +87,8 @@
     msg: >-
       NetBird could not connect within {{ netbird_connect_timeout }} seconds.
       Check the management URL, network reachability, and setup-key validity,
-      then rerun the playbook or connect manually with `sudo netbird up`.
+      then rerun the playbook or connect manually with
+      `{{ openclaw_vpn_connect_command }}`.
   when:
     - netbird_join is defined
     - not (netbird_join.skipped | default(false))
@@ -117,8 +124,24 @@
 - name: Display manual NetBird connection guidance
   ansible.builtin.debug:
     msg: >-
-      NetBird is installed but not connected. Run `sudo netbird up`, or provide
-      netbird_setup_key for unattended registration.
+      NetBird is installed but not connected. Run
+      `{{ openclaw_vpn_connect_command }}`, or provide netbird_setup_key for
+      unattended registration.
+  register: netbird_manual_guidance
   when:
     - netbird_authenticated.rc != 0
     - netbird_setup_key | length == 0
+
+- name: Record whether selected NetBird is ready
+  ansible.builtin.set_fact:
+    openclaw_selected_vpn_ready: >-
+      {{ netbird_authenticated.rc == 0
+         or (netbird_ready_after_join is defined
+             and not (netbird_ready_after_join.skipped | default(false))
+             and (netbird_ready_after_join.rc | default(1)) == 0) }}
+
+- name: Reject management endpoint drift on a connected NetBird client
+  ansible.builtin.include_tasks: netbird-endpoint-linux.yml
+  when:
+    - openclaw_selected_vpn_ready | bool
+    - netbird_management_url | length > 0

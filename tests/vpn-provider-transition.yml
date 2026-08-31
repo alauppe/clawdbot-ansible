@@ -1,0 +1,331 @@
+---
+- name: Verify VPN provider transitions on a disposable Linux host
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+
+  vars:
+    openclaw_user: root
+    openclaw_home: /tmp/openclaw-vpn-transition
+
+  tasks:
+    - name: Create disposable OpenClaw home
+      ansible.builtin.file:
+        path: "{{ openclaw_home }}"
+        state: directory
+        owner: "{{ openclaw_user }}"
+        group: "{{ openclaw_user }}"
+        mode: '0755'
+
+    - name: Install UFW for transition verification
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+        update_cache: true
+
+    - name: Set safe UFW policies for the disposable runner
+      community.general.ufw:
+        direction: "{{ item.direction }}"
+        policy: "{{ item.policy }}"
+      loop:
+        - { direction: incoming, policy: deny }
+        - { direction: outgoing, policy: allow }
+
+    - name: Enable UFW on the disposable runner
+      community.general.ufw:
+        state: enabled
+
+    - name: Select NetBird for initial provisioning
+      ansible.builtin.set_fact:
+        openclaw_vpn_provider: netbird
+        netbird_management_url: https://netbird.example.test
+
+    - name: Provision the real NetBird package and daemon
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: netbird-linux
+
+    - name: Assert self-hosted manual setup keeps its management endpoint
+      ansible.builtin.assert:
+        that:
+          - not (openclaw_selected_vpn_ready | bool)
+          - >-
+            openclaw_vpn_connect_command ==
+            'sudo netbird up
+            --management-url=https://netbird.example.test'
+          - >-
+            'sudo netbird up
+            --management-url=https://netbird.example.test'
+            in netbird_manual_guidance.msg
+
+    - name: Render the production welcome message
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: welcome-message-linux
+
+    - name: Read the rendered welcome message
+      ansible.builtin.slurp:
+        src: "{{ openclaw_home }}/.openclaw-welcome"
+      register: rendered_welcome_message
+
+    - name: Assert self-hosted welcome keeps its management endpoint
+      ansible.builtin.assert:
+        that:
+          - >-
+            'sudo netbird up
+            --management-url=https://netbird.example.test'
+            in (rendered_welcome_message.content | b64decode)
+
+    - name: Default endpoint-drift rejection observation
+      ansible.builtin.set_fact:
+        netbird_endpoint_drift_rejected: false
+        openclaw_selected_vpn_ready: true
+
+    - name: Exercise connected-client endpoint-drift rejection
+      block:
+        - name: Compare the real client's endpoint to requested configuration
+          ansible.builtin.include_role:
+            name: openclaw
+            tasks_from: netbird-endpoint-linux
+      rescue:
+        - name: Record the expected endpoint-drift refusal
+          ansible.builtin.set_fact:
+            netbird_endpoint_drift_rejected: true
+
+    - name: Assert connected endpoint drift is rejected before mutation
+      ansible.builtin.assert:
+        that:
+          - netbird_endpoint_drift_rejected
+          - netbird_effective_management_url != netbird_management_url
+
+    - name: Restore actual NetBird readiness for transition testing
+      ansible.builtin.set_fact:
+        openclaw_selected_vpn_ready: false
+
+    - name: Reconcile initial NetBird service state
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-reconcile-linux
+
+    - name: Reconcile initial NetBird firewall state
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-firewall-linux
+
+    - name: Select Tailscale
+      ansible.builtin.set_fact:
+        openclaw_vpn_provider: tailscale
+
+    - name: Provision the real Tailscale package and daemon
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: tailscale-linux
+
+    - name: Attempt NetBird to unready Tailscale transition
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-reconcile-linux
+
+    - name: Reconcile Tailscale firewall allowance
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-firewall-linux
+
+    - name: Read UFW state during unready Tailscale transition
+      ansible.builtin.command: ufw status
+      register: ufw_during_tailscale_transition
+      changed_when: false
+
+    - name: Probe retained NetBird daemon
+      ansible.builtin.command: systemctl is-active netbird.service
+      register: netbird_during_tailscale_transition
+      changed_when: false
+      failed_when: false
+
+    - name: Assert unready Tailscale does not displace NetBird
+      ansible.builtin.assert:
+        that:
+          - not (openclaw_selected_vpn_ready | bool)
+          - ansible_facts.services['tailscaled.service'].state == 'running'
+          - ansible_facts.services['tailscaled.service'].status == 'enabled'
+          - netbird_during_tailscale_transition.rc == 0
+          - ansible_facts.services['netbird.service'].status == 'enabled'
+          - "'41641/udp' in ufw_during_tailscale_transition.stdout"
+
+    # The hosted test intentionally uses no private-network credentials. Mark
+    # readiness only after proving the production task detected the unready
+    # state and retained the old connection.
+    - name: Simulate completed Tailscale authentication
+      ansible.builtin.set_fact:
+        openclaw_selected_vpn_ready: true
+
+    - name: Complete NetBird to ready Tailscale transition
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-reconcile-linux
+
+    - name: Reconcile completed Tailscale firewall allowance
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-firewall-linux
+
+    - name: Probe deselected NetBird daemon
+      ansible.builtin.command: systemctl is-active netbird.service
+      register: netbird_after_tailscale
+      changed_when: false
+      failed_when: false
+
+    - name: Assert NetBird to ready Tailscale convergence
+      ansible.builtin.assert:
+        that:
+          - netbird_after_tailscale.rc != 0
+          - ansible_facts.services['netbird.service'].status == 'disabled'
+
+    - name: Reapply Tailscale service reconciliation
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-reconcile-linux
+
+    - name: Reapply Tailscale firewall reconciliation
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-firewall-linux
+
+    - name: Assert Tailscale state is idempotent
+      ansible.builtin.assert:
+        that:
+          - not inactive_vpn_services.changed
+          - not tailscale_firewall_rule.changed
+
+    - name: Select NetBird again
+      ansible.builtin.set_fact:
+        openclaw_vpn_provider: netbird
+
+    - name: Restart the selected NetBird provider
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: netbird-linux
+
+    - name: Attempt Tailscale to unready NetBird transition
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-reconcile-linux
+
+    - name: Retain Tailscale firewall allowance during migration
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-firewall-linux
+
+    - name: Read UFW state during unready NetBird transition
+      ansible.builtin.command: ufw status
+      register: ufw_during_netbird_transition
+      changed_when: false
+
+    - name: Probe retained Tailscale daemon
+      ansible.builtin.command: systemctl is-active tailscaled.service
+      register: tailscale_during_netbird_transition
+      changed_when: false
+      failed_when: false
+
+    - name: Assert unready NetBird does not displace Tailscale
+      ansible.builtin.assert:
+        that:
+          - not (openclaw_selected_vpn_ready | bool)
+          - ansible_facts.services['netbird.service'].state == 'running'
+          - ansible_facts.services['netbird.service'].status == 'enabled'
+          - tailscale_during_netbird_transition.rc == 0
+          - ansible_facts.services['tailscaled.service'].status == 'enabled'
+          - "'41641/udp' in ufw_during_netbird_transition.stdout"
+
+    - name: Simulate completed NetBird authentication
+      ansible.builtin.set_fact:
+        openclaw_selected_vpn_ready: true
+
+    - name: Complete Tailscale to ready NetBird transition
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-reconcile-linux
+
+    - name: Remove stale Tailscale firewall allowance
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-firewall-linux
+
+    - name: Read UFW state after selecting NetBird
+      ansible.builtin.command: ufw status
+      register: ufw_after_netbird
+      changed_when: false
+
+    - name: Probe deselected Tailscale daemon
+      ansible.builtin.command: systemctl is-active tailscaled.service
+      register: tailscale_after_netbird
+      changed_when: false
+      failed_when: false
+
+    - name: Assert Tailscale to ready NetBird convergence
+      ansible.builtin.assert:
+        that:
+          - tailscale_after_netbird.rc != 0
+          - ansible_facts.services['tailscaled.service'].status == 'disabled'
+          - "'41641/udp' not in ufw_after_netbird.stdout"
+
+    - name: Reapply NetBird service reconciliation
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-reconcile-linux
+
+    - name: Reapply NetBird firewall reconciliation
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-firewall-linux
+
+    - name: Assert NetBird state is idempotent
+      ansible.builtin.assert:
+        that:
+          - not inactive_vpn_services.changed
+          - not tailscale_firewall_rule.changed
+
+    - name: Simulate an independently managed Tailscale daemon
+      ansible.builtin.systemd:
+        name: tailscaled
+        state: started
+        enabled: true
+
+    - name: Simulate its existing UFW allowance
+      community.general.ufw:
+        rule: allow
+        port: '41641'
+        proto: udp
+        comment: Tailscale
+
+    - name: Clear provider selection as on a legacy unconfigured upgrade
+      ansible.builtin.set_fact:
+        openclaw_vpn_provider: ""
+        openclaw_selected_vpn_ready: false
+
+    - name: Reconcile an unconfigured upgrade
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-reconcile-linux
+
+    - name: Preserve firewall state on an unconfigured upgrade
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-firewall-linux
+
+    - name: Read preserved UFW state
+      ansible.builtin.command: ufw status
+      register: ufw_after_unconfigured_upgrade
+      changed_when: false
+
+    - name: Assert unconfigured upgrade preserves existing providers
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services['netbird.service'].state == 'running'
+          - ansible_facts.services['netbird.service'].status == 'enabled'
+          - ansible_facts.services['tailscaled.service'].state == 'running'
+          - ansible_facts.services['tailscaled.service'].status == 'enabled'
+          - "'41641/udp' in ufw_after_unconfigured_upgrade.stdout"
+          - not inactive_vpn_services.changed
+          - not tailscale_firewall_rule.changed

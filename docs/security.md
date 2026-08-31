@@ -29,6 +29,26 @@ Tailscale (41641/udp): ALLOW
 NetBird clients initiate connections outbound and do not require an inbound UFW
 port. NetBird manages access on its tunnel interface after connection.
 
+Changing `vpn_provider` converges both daemon and firewall state without
+cutting off a working remote path. The role keeps the deselected VPN and its
+firewall allowance active until the replacement reports that it is connected
+and ready. It then stops and disables the old service and removes the Tailscale
+UDP allowance when no running Tailscale service needs it. Packages and local
+provider identities remain intact so an intentional migration can be reversed.
+When no provider is configured, the role preserves detected VPN daemons and
+their firewall/operator state so an ordinary upgrade cannot take ownership of
+or disconnect an independently managed remote-access path.
+
+Tailscale operator access is reconciled as a persistent privilege. Enabling it
+grants the OpenClaw account local daemon control only when no other operator is
+assigned. Disabling it, or selecting another VPN, revokes an OpenClaw-owned
+grant while preserving a delegation assigned to any other account. An
+installed but stopped Tailscale daemon is started temporarily for this check
+and returned to its stopped state even when reconciliation fails.
+The generated sudoers policy permits only read-only Tailscale diagnostics; it
+does not permit `tailscale up` or `tailscale down`, so it cannot bypass operator
+opt-out or recreate daemon-control authority.
+
 ### Layer 2: Fail2ban (SSH Protection)
 
 Automatic protection against SSH brute-force attacks:

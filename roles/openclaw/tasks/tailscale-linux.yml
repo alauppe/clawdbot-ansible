@@ -1,6 +1,10 @@
 ---
 # Linux-specific Tailscale installation (Debian/Ubuntu)
 
+- name: Build the manual Tailscale connection command
+  ansible.builtin.set_fact:
+    openclaw_vpn_connect_command: sudo tailscale up
+
 - name: Add Tailscale GPG key
   ansible.builtin.shell:
     cmd: |
@@ -101,6 +105,35 @@
     - not (tailscale_join.skipped | default(false))
     - (tailscale_join.rc | default(1)) != 0
 
+- name: Refresh Tailscale status after auth-key join
+  ansible.builtin.command: tailscale status --json
+  register: tailscale_status_after_join
+  changed_when: false
+  failed_when: false
+  when:
+    - tailscale_join is defined
+    - not (tailscale_join.skipped | default(false))
+    - (tailscale_join.rc | default(1)) == 0
+
+- name: Parse Tailscale backend state after auth-key join
+  when:
+    - tailscale_status_after_join is defined
+    - not (tailscale_status_after_join.skipped | default(false))
+    - (tailscale_status_after_join.rc | default(1)) == 0
+    - tailscale_status_after_join.stdout | default('') | trim | length > 0
+  block:
+    - name: Read refreshed BackendState from Tailscale status JSON
+      ansible.builtin.set_fact:
+        tailscale_backend_state: >-
+          {{ (tailscale_status_after_join.stdout | from_json).BackendState
+             | default('Unknown') }}
+  rescue:
+    - name: Report unreadable refreshed Tailscale status
+      ansible.builtin.debug:
+        msg: >-
+          Tailscale joined but returned unreadable status JSON. The previous
+          VPN will be retained until a later run confirms Tailscale is ready.
+
 - name: Display Tailscale auth URL when login is required (Linux)
   ansible.builtin.debug:
     msg:
@@ -132,3 +165,7 @@
       Tailscale status is unavailable, so automatic login was skipped. Run
       `sudo tailscale status` and inspect the tailscaled service before retrying.
   when: tailscale_backend_state == 'Unknown'
+
+- name: Record whether selected Tailscale is ready
+  ansible.builtin.set_fact:
+    openclaw_selected_vpn_ready: "{{ tailscale_backend_state == 'Running' }}"

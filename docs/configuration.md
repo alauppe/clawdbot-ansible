@@ -175,7 +175,14 @@ These variables only apply when `openclaw_install_mode: development`
 - **Default**: `""`
 - **Description**: Select one optional mesh VPN provider. Existing inventories
   that set `tailscale_enabled: true` continue to select Tailscale when this
-  variable is empty.
+  variable is empty. When this selection changes, the role installs and starts
+  the selected provider but keeps the previous VPN active until the replacement
+  reports that it is connected and ready. For manual authentication, connect
+  the new provider and rerun the playbook to finish the migration. The previous
+  package and local identity are retained so the change remains reversible. An
+  empty selection preserves existing VPN daemons, firewall rules, and operator
+  state for backward compatibility; select a provider explicitly before asking
+  the role to manage or migrate it.
 
 ### Tailscale Configuration
 
@@ -208,7 +215,13 @@ Providing a non-empty auth key enables Tailscale installation automatically;
 - **Description**: Delegate Tailscale operator access to the OpenClaw service
   account so it can manage Tailscale Serve without sudo. This grants broader
   control of the local Tailscale daemon and is intentionally opt-in. The role
-  refuses to replace an operator already assigned to another account.
+  refuses to replace an operator already assigned to another account. Setting
+  this back to `false`, or selecting another VPN provider, removes the grant
+  only when the current operator is the OpenClaw account; another account's
+  delegation is preserved. If an installed Tailscale daemon is stopped, the
+  role starts it only long enough to reconcile the persisted operator and then
+  restores the stopped state. The generated sudoers policy exposes only
+  read-only Tailscale diagnostics and cannot recreate operator authority.
 - **Example**:
   ```bash
   -e tailscale_operator_enabled=true
@@ -231,6 +244,9 @@ Providing a non-empty auth key enables Tailscale installation automatically;
 - **Type**: String
 - **Default**: `""` (NetBird Cloud)
 - **Description**: Management service URL for a self-hosted NetBird deployment.
+- **Migration safety**: If an already-connected client uses a different
+  management endpoint, the playbook stops with explicit re-enrollment guidance.
+  It does not move an enrolled peer between trust domains automatically.
 ### OS-Specific Settings
 
 These are automatically set based on the detected OS:

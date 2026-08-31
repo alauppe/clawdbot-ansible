@@ -11,11 +11,28 @@
         and (tailscale_enabled | bool
         or tailscale_authkey | length > 0
         or tailscale_operator_enabled | bool))
-      - vpn_provider == 'netbird' or netbird_setup_key | length == 0
+      - >-
+        vpn_provider == 'netbird'
+        or (netbird_setup_key | length == 0
+        and netbird_management_url | length == 0)
     fail_msg: >-
       vpn_provider must be '', 'tailscale', or 'netbird', and credentials must
       match the selected provider. Do not combine NetBird with Tailscale
-      settings or provide a NetBird key without vpn_provider=netbird.
+      settings or provide NetBird settings without vpn_provider=netbird.
+
+- name: Validate self-hosted NetBird management URL
+  ansible.builtin.assert:
+    that:
+      - (netbird_management_url | ansible.builtin.urlsplit('scheme')) in ['http', 'https']
+      - netbird_management_url | ansible.builtin.urlsplit('hostname') | length > 0
+      - netbird_management_url | ansible.builtin.urlsplit('username') is none
+      - netbird_management_url | ansible.builtin.urlsplit('password') is none
+      - netbird_management_url | ansible.builtin.urlsplit('query') | length == 0
+      - netbird_management_url | ansible.builtin.urlsplit('fragment') | length == 0
+    fail_msg: >-
+      netbird_management_url must be an absolute HTTP(S) management service
+      URL without credentials, a query string, or a fragment.
+  when: netbird_management_url | length > 0
 
 - name: Resolve effective VPN provider
   ansible.builtin.set_fact:
@@ -26,6 +43,10 @@
                or tailscale_authkey | length > 0
                or tailscale_operator_enabled | bool
                else '') }}
+
+- name: Default selected VPN readiness
+  ansible.builtin.set_fact:
+    openclaw_selected_vpn_ready: false
 
 - name: Include Tailscale installation tasks
   ansible.builtin.include_tasks: tailscale-linux.yml
@@ -38,46 +59,17 @@
 - name: Include user creation tasks
   ansible.builtin.include_tasks: user.yml
 
-- name: Read the current Tailscale operator
-  ansible.builtin.command: tailscale get operator
-  register: tailscale_operator_current
-  changed_when: false
-  failed_when: false
-  when: tailscale_operator_enabled | bool
-
-- name: Fail safely when the current Tailscale operator cannot be read
-  ansible.builtin.fail:
-    msg: >-
-      Unable to read the current Tailscale operator. No permission was changed.
-      Verify `sudo tailscale get operator` before retrying.
+- name: Reconcile Tailscale operator access
+  ansible.builtin.include_tasks: tailscale-operator-linux.yml
   when:
-    - tailscale_operator_enabled | bool
-    - (tailscale_operator_current.rc | default(1)) != 0
+    - not ci_test
+    - openclaw_vpn_provider | length > 0
 
-- name: Refuse to replace an existing Tailscale operator
-  ansible.builtin.fail:
-    msg: >-
-      Tailscale already delegates operator access to
-      '{{ tailscale_operator_current.stdout | trim }}'. No permission was
-      changed. Remove that delegation explicitly before granting it to
-      '{{ openclaw_user }}'.
-  when:
-    - tailscale_operator_enabled | bool
-    - (tailscale_operator_current.rc | default(1)) == 0
-    - tailscale_operator_current.stdout | default('') | trim | length > 0
-    - tailscale_operator_current.stdout | default('') | trim != openclaw_user
-
-- name: Grant the openclaw user Tailscale operator access
-  ansible.builtin.command:
-    argv:
-      - tailscale
-      - set
-      - "--operator={{ openclaw_user }}"
-  changed_when: true
-  when:
-    - tailscale_operator_enabled | bool
-    - (tailscale_operator_current.rc | default(1)) == 0
-    - tailscale_operator_current.stdout | default('') | trim | length == 0
+# Install and verify the selected provider before stopping the previous one.
+# Revoke any OpenClaw-owned operator grant while tailscaled is still reachable.
+- name: Reconcile inactive VPN services
+  ansible.builtin.include_tasks: vpn-reconcile-linux.yml
+  when: not ci_test
 
 - name: Include Docker installation tasks
   ansible.builtin.include_tasks: docker-linux.yml

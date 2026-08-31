@@ -55,11 +55,12 @@
       # SECURITY NOTE: These permissions are intentionally limited.
       # If openclaw is compromised, attackers can only:
       # - Manage the openclaw service
-      # - Run basic VPN diagnostics when Tailscale is selected
+      # - Run read-only VPN diagnostics when Tailscale is selected
       # - View openclaw logs
       #
-      # To grant full tailscale control (e.g., for self-healing VPN):
-      #   {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale *
+      # Tailscale control is granted only through tailscale_operator_enabled.
+      # Do not add wildcard `tailscale up` sudo access: it can recreate an
+      # operator assignment and bypass that explicit privilege boundary.
       #
       # To grant full sudo (NOT RECOMMENDED):
       #   {{ openclaw_user }} ALL=(ALL) NOPASSWD: ALL
@@ -75,12 +76,8 @@
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
 
       {% if openclaw_vpn_provider == 'tailscale' %}
-      # Tailscale - diagnostics + connect/disconnect
-      # NOTE: 'up' allows flags like --advertise-exit-node. For tighter control,
-      # remove 'up' and 'down' lines - operator must then manage VPN manually.
+      # Tailscale - read-only diagnostics only
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale status
-      {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale up *
-      {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale down
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale ip *
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale version
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale ping *

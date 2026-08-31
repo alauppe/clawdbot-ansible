@@ -55,7 +55,12 @@ Get auth keys from: https://login.tailscale.com/admin/settings/keys
 For NetBird:
 
 ```bash
+# NetBird Cloud
 sudo netbird up
+
+# Self-hosted NetBird
+sudo netbird up --management-url=https://netbird.example.com
+
 sudo netbird status
 ```
 
