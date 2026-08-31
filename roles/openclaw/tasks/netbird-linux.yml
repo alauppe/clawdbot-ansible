@@ -41,6 +41,15 @@
     mode: '0644'
   register: netbird_repository
 
+- name: Check whether the NetBird package source is available
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/share/keyrings/netbird-archive-keyring.gpg
+    - /etc/apt/sources.list.d/netbird.list
+  register: netbird_package_source
+  check_mode: false
+
 - name: Install NetBird
   ansible.builtin.apt:
     name: netbird
@@ -48,9 +57,15 @@
     update_cache: "{{ netbird_repository.changed }}"
   register: netbird_package_install
   when: >-
-    not ansible_check_mode
-    or netbird_executable.stat.exists
-    or not netbird_repository.changed
+    netbird_executable.stat.exists
+    or (netbird_package_source.results
+        | map(attribute='stat.exists') | min)
+
+- name: Refresh NetBird executable availability after package handling
+  ansible.builtin.stat:
+    path: /usr/bin/netbird
+  register: netbird_executable_after_install
+  check_mode: false
 
 - name: Enable and start NetBird
   ansible.builtin.systemd:
@@ -58,7 +73,7 @@
     enabled: true
     state: started
   register: netbird_service
-  when: not ansible_check_mode or netbird_executable.stat.exists
+  when: netbird_executable_after_install.stat.exists
 
 - name: Check whether NetBird is connected and ready
   ansible.builtin.command:

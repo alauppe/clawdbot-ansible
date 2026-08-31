@@ -34,6 +34,15 @@
     executable: /bin/bash
   register: tailscale_repository
 
+- name: Check whether the Tailscale package source is available
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/share/keyrings/tailscale-archive-keyring.gpg
+    - /etc/apt/sources.list.d/tailscale.list
+  register: tailscale_package_source
+  check_mode: false
+
 - name: Update apt cache after adding Tailscale repo
   ansible.builtin.apt:
     update_cache: true
@@ -44,9 +53,15 @@
     state: present
   register: tailscale_package_install
   when: >-
-    not ansible_check_mode
-    or tailscale_executable.stat.exists
-    or not tailscale_repository.changed
+    tailscale_executable.stat.exists
+    or (tailscale_package_source.results
+        | map(attribute='stat.exists') | min)
+
+- name: Refresh Tailscale executable availability after package handling
+  ansible.builtin.stat:
+    path: /usr/bin/tailscale
+  register: tailscale_executable_after_install
+  check_mode: false
 
 - name: Enable Tailscale service (Linux)
   ansible.builtin.systemd:
@@ -54,7 +69,7 @@
     enabled: true
     state: started
   register: tailscale_service
-  when: not ansible_check_mode or tailscale_executable.stat.exists
+  when: tailscale_executable_after_install.stat.exists
 
 - name: Check if Tailscale is already connected (Linux)
   ansible.builtin.command: tailscale status --json
