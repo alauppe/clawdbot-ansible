@@ -467,6 +467,7 @@
     - name: Select NetBird again
       ansible.builtin.set_fact:
         openclaw_vpn_provider: netbird
+        netbird_management_url: https://127.0.0.1:1
 
     - name: Restart the selected NetBird provider
       ansible.builtin.include_role:
