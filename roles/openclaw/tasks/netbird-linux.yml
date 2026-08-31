@@ -7,29 +7,109 @@
       sudo netbird up{{ ' --management-url=' ~ (netbird_management_url | quote)
       if netbird_management_url | length > 0 else '' }}
 
-- name: Discover NetBird profiles that predate this run
-  ansible.builtin.find:
-    paths:
-      - /var/lib/netbird
-      - /etc/netbird
-    patterns: '*.json'
-    excludes:
-      - active_profile.json
-      - service.json
-      - state.json
-      - '*.prefs.json'
-      - '*.state.json'
-    file_type: file
-    recurse: true
-  register: netbird_existing_profiles
+- name: Check for NetBird active-profile metadata
+  ansible.builtin.stat:
+    path: /var/lib/netbird/active_profile.json
+  register: netbird_active_profile_metadata
   check_mode: false
-  changed_when: false
-  failed_when: false
 
-- name: Record whether a NetBird profile already existed
+- name: Read NetBird active-profile metadata
+  ansible.builtin.slurp:
+    src: /var/lib/netbird/active_profile.json
+  register: netbird_active_profile_file
+  check_mode: false
+  when: netbird_active_profile_metadata.stat.exists
+
+- name: Resolve the active NetBird profile identity
   ansible.builtin.set_fact:
+    netbird_active_profile: >-
+      {{ (netbird_active_profile_file.content | b64decode | from_json)
+         if netbird_active_profile_metadata.stat.exists
+         else {'name': 'default', 'username': ''} }}
+
+- name: Validate the persisted NetBird profile identity
+  ansible.builtin.assert:
+    that:
+      - >-
+        netbird_active_profile.get('name', 'default')
+        is match('^[A-Za-z0-9_-]+$')
+      - >-
+        netbird_active_profile.get('username', '')
+        is match('^[A-Za-z0-9_-]*$')
+    fail_msg: >-
+      NetBird active-profile metadata is invalid. Refusing to construct a
+      privileged profile path; inspect /var/lib/netbird/active_profile.json.
+
+- name: Resolve the persisted NetBird profile path
+  ansible.builtin.set_fact:
+    netbird_active_profile_path: >-
+      {{ '/var/lib/netbird/default.json'
+         if netbird_active_profile.get('name', 'default') == 'default'
+         else '/var/lib/netbird/'
+              ~ netbird_active_profile.get('username', '') ~ '/'
+              ~ netbird_active_profile.get('name') ~ '.json' }}
+
+- name: Check for current and legacy NetBird profiles
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ netbird_active_profile_path }}"
+    - /etc/netbird/config.json
+  register: netbird_profile_candidates
+  check_mode: false
+
+- name: Record the persisted NetBird profile path
+  ansible.builtin.set_fact:
+    netbird_persisted_profile_path: >-
+      {{ netbird_active_profile_path
+         if netbird_profile_candidates.results[0].stat.exists
+         else ('/etc/netbird/config.json'
+               if netbird_profile_candidates.results[1].stat.exists else '') }}
     netbird_profile_preexisting: >-
-      {{ (netbird_existing_profiles.matched | default(0) | int) > 0 }}
+      {{ netbird_profile_candidates.results
+         | map(attribute='stat.exists') | max }}
+
+- name: Read the persisted NetBird profile before any service activity
+  ansible.builtin.slurp:
+    src: "{{ netbird_persisted_profile_path }}"
+  register: netbird_persisted_profile
+  check_mode: false
+  no_log: true
+  when: netbird_profile_preexisting | bool
+
+- name: Parse the persisted NetBird management endpoint fields
+  ansible.builtin.set_fact:
+    netbird_persisted_management_parts: >-
+      {{ ((netbird_persisted_profile.content | b64decode | from_json)
+          ['ManagementURL']) | default({}) }}
+  no_log: true
+  when: netbird_profile_preexisting | bool
+
+- name: Read the persisted NetBird management endpoint
+  ansible.builtin.set_fact:
+    netbird_effective_management_url: >-
+      {{ netbird_persisted_management_parts
+         if netbird_persisted_management_parts is string
+         else netbird_persisted_management_parts.get('Scheme', '') ~ '://'
+              ~ netbird_persisted_management_parts.get('Host', '')
+              ~ netbird_persisted_management_parts.get('Path', '') }}
+  no_log: true
+  when: netbird_profile_preexisting | bool
+
+- name: Fail safely when the persisted NetBird endpoint is unavailable
+  ansible.builtin.fail:
+    msg: >-
+      NetBird has an existing profile, but its persisted management endpoint
+      could not be read. The service was not started and no control-plane
+      migration was attempted. Inspect '{{ netbird_persisted_profile_path }}'
+      and rerun the playbook.
+  when:
+    - netbird_profile_preexisting | bool
+    - netbird_effective_management_url | default('') | length == 0
+
+- name: Validate the persisted endpoint before any service activity
+  ansible.builtin.include_tasks: netbird-endpoint-compare-linux.yml
+  when: netbird_profile_preexisting | bool
 
 - name: Check whether NetBird is already installed
   ansible.builtin.stat:
@@ -112,15 +192,6 @@
   check_mode: false
   changed_when: false
   failed_when: false
-
-# A setup key can re-enroll an existing, stopped peer. Validate its persisted
-# trust domain before `netbird up` receives a potentially different endpoint.
-- name: Reject endpoint drift before re-enrolling an existing NetBird profile
-  ansible.builtin.include_tasks: netbird-endpoint-linux.yml
-  when:
-    - (netbird_authenticated.rc | default(1)) != 0
-    - netbird_setup_key | length > 0
-    - netbird_profile_preexisting | bool
 
 - name: Join NetBird with a setup key
   ansible.builtin.command:

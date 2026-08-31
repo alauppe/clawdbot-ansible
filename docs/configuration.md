@@ -247,9 +247,11 @@ Providing a non-empty auth key enables Tailscale installation automatically;
 - **Migration safety**: If an existing profile uses a different management
   endpoint, the playbook stops with explicit re-enrollment guidance before
   reconnecting it, including when that profile is stopped or unready and a
-  setup key is configured. It does not move an enrolled peer between trust
-  domains automatically. This also applies when clearing a self-hosted URL: an
-  empty value selects NetBird Cloud (`https://api.netbird.io:443`) and requires
+  setup key is configured. Persisted profile data is checked before package or
+  service activity, so a stopped client is not reconnected merely to inspect
+  it. The role does not move an enrolled peer between trust domains
+  automatically. This also applies when clearing a self-hosted URL: an empty
+  value selects NetBird Cloud (`https://api.netbird.io:443`) and requires
   deliberate re-enrollment; the refusal includes a command with that explicit
   Cloud endpoint so the old self-hosted URL is not retained.
 

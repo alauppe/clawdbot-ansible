@@ -216,6 +216,24 @@
             --management-url=https://api.netbird.io:443'
             in netbird_cloud_endpoint_drift_message
 
+    - name: Stop and disable the existing NetBird profile fixture
+      ansible.builtin.systemd:
+        name: netbird
+        state: stopped
+        enabled: false
+
+    - name: Record NetBird state before persisted-endpoint validation
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - netbird.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: netbird_state_before_stopped_drift
+      changed_when: false
+
     - name: Configure setup-key re-enrollment over the stopped profile
       ansible.builtin.set_fact:
         netbird_setup_key: setup-key-check-placeholder
@@ -235,6 +253,18 @@
             netbird_stopped_endpoint_drift_message: >-
               {{ ansible_failed_result.msg | default('') }}
 
+    - name: Record NetBird state after persisted-endpoint validation
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - netbird.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: netbird_state_after_stopped_drift
+      changed_when: false
+
     - name: Assert drift is rejected before stopped-profile re-enrollment
       ansible.builtin.assert:
         that:
@@ -246,10 +276,19 @@
           - >-
             'https://api.netbird.io:443' in
             netbird_stopped_endpoint_drift_message
+          - >-
+            netbird_state_after_stopped_drift.stdout ==
+            netbird_state_before_stopped_drift.stdout
 
     - name: Clear the placeholder NetBird setup key
       ansible.builtin.set_fact:
         netbird_setup_key: ""
+
+    - name: Restore the NetBird service transition fixture
+      ansible.builtin.systemd:
+        name: netbird
+        state: started
+        enabled: true
 
     - name: Restore actual NetBird readiness for transition testing
       ansible.builtin.set_fact:
