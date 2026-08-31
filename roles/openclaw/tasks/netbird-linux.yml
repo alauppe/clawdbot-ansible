@@ -7,6 +7,30 @@
       sudo netbird up{{ ' --management-url=' ~ (netbird_management_url | quote)
       if netbird_management_url | length > 0 else '' }}
 
+- name: Discover NetBird profiles that predate this run
+  ansible.builtin.find:
+    paths:
+      - /var/lib/netbird
+      - /etc/netbird
+    patterns: '*.json'
+    excludes:
+      - active_profile.json
+      - service.json
+      - state.json
+      - '*.prefs.json'
+      - '*.state.json'
+    file_type: file
+    recurse: true
+  register: netbird_existing_profiles
+  check_mode: false
+  changed_when: false
+  failed_when: false
+
+- name: Record whether a NetBird profile already existed
+  ansible.builtin.set_fact:
+    netbird_profile_preexisting: >-
+      {{ (netbird_existing_profiles.matched | default(0) | int) > 0 }}
+
 - name: Check whether NetBird is already installed
   ansible.builtin.stat:
     path: /usr/bin/netbird
@@ -88,6 +112,15 @@
   check_mode: false
   changed_when: false
   failed_when: false
+
+# A setup key can re-enroll an existing, stopped peer. Validate its persisted
+# trust domain before `netbird up` receives a potentially different endpoint.
+- name: Reject endpoint drift before re-enrolling an existing NetBird profile
+  ansible.builtin.include_tasks: netbird-endpoint-linux.yml
+  when:
+    - (netbird_authenticated.rc | default(1)) != 0
+    - netbird_setup_key | length > 0
+    - netbird_profile_preexisting | bool
 
 - name: Join NetBird with a setup key
   ansible.builtin.command:

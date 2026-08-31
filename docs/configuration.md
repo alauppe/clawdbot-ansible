@@ -244,13 +244,14 @@ Providing a non-empty auth key enables Tailscale installation automatically;
 - **Type**: String
 - **Default**: `""` (NetBird Cloud)
 - **Description**: Management service URL for a self-hosted NetBird deployment.
-- **Migration safety**: If an already-connected client uses a different
-  management endpoint, the playbook stops with explicit re-enrollment guidance.
-  It does not move an enrolled peer between trust domains automatically. This
-  also applies when clearing a self-hosted URL: an empty value selects NetBird
-  Cloud (`https://api.netbird.io:443`) and requires deliberate re-enrollment;
-  the refusal includes a command with that explicit Cloud endpoint so the old
-  self-hosted URL is not retained.
+- **Migration safety**: If an existing profile uses a different management
+  endpoint, the playbook stops with explicit re-enrollment guidance before
+  reconnecting it, including when that profile is stopped or unready and a
+  setup key is configured. It does not move an enrolled peer between trust
+  domains automatically. This also applies when clearing a self-hosted URL: an
+  empty value selects NetBird Cloud (`https://api.netbird.io:443`) and requires
+  deliberate re-enrollment; the refusal includes a command with that explicit
+  Cloud endpoint so the old self-hosted URL is not retained.
 
 ### OS-Specific Settings
 

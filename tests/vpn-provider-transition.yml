@@ -216,6 +216,41 @@
             --management-url=https://api.netbird.io:443'
             in netbird_cloud_endpoint_drift_message
 
+    - name: Configure setup-key re-enrollment over the stopped profile
+      ansible.builtin.set_fact:
+        netbird_setup_key: setup-key-check-placeholder
+        netbird_stopped_endpoint_drift_rejected: false
+        openclaw_selected_vpn_ready: false
+
+    - name: Exercise stopped-profile endpoint-drift rejection
+      block:
+        - name: Run production NetBird provisioning over the stopped profile
+          ansible.builtin.include_role:
+            name: openclaw
+            tasks_from: netbird-linux
+      rescue:
+        - name: Record the expected stopped-profile drift refusal
+          ansible.builtin.set_fact:
+            netbird_stopped_endpoint_drift_rejected: true
+            netbird_stopped_endpoint_drift_message: >-
+              {{ ansible_failed_result.msg | default('') }}
+
+    - name: Assert drift is rejected before stopped-profile re-enrollment
+      ansible.builtin.assert:
+        that:
+          - netbird_profile_preexisting | bool
+          - netbird_stopped_endpoint_drift_rejected
+          - >-
+            'NetBird is configured for' in
+            netbird_stopped_endpoint_drift_message
+          - >-
+            'https://api.netbird.io:443' in
+            netbird_stopped_endpoint_drift_message
+
+    - name: Clear the placeholder NetBird setup key
+      ansible.builtin.set_fact:
+        netbird_setup_key: ""
+
     - name: Restore actual NetBird readiness for transition testing
       ansible.builtin.set_fact:
         openclaw_selected_vpn_ready: false

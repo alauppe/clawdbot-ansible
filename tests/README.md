@@ -46,9 +46,9 @@ fresh `ubuntu-24.04` hosted runners. Do not run these on a persistent host:
 - `vpn-provider-transition.yml` installs both real VPN clients, exercises both
   provider-switch directions, verifies service and UFW convergence, preserves
   unconfigured existing providers, renders self-hosted manual guidance, rejects
-  connected-client management endpoint drift (including self-hosted to Cloud),
-  exercises fresh-install and credential paths in check mode, and repeats
-  reconciliation for idempotency.
+  ready and stopped-client management endpoint drift (including self-hosted to
+  Cloud), exercises fresh-install and credential paths in check mode, and
+  repeats reconciliation for idempotency.
 - `tailscale-operator-boundary.yml` uses a real Tailscale daemon and the
   production sudoers template to prove grant, revocation, preservation of a
   different operator, stopped-daemon reconciliation, and rejection of a

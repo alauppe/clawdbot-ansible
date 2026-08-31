@@ -18,10 +18,10 @@
 - name: Fail safely when the NetBird management endpoint cannot be verified
   ansible.builtin.fail:
     msg: >-
-      NetBird is connected, but its effective management endpoint could not be
-      verified. No control-plane migration was attempted. Update the NetBird
-      client so `sudo netbird debug config` is available, verify its
-      managementUrl, and rerun the playbook.
+      NetBird has an existing profile, but its effective management endpoint
+      could not be verified. No control-plane migration was attempted. Update
+      the NetBird client so `sudo netbird debug config` is available, verify
+      its managementUrl, and rerun the playbook.
   when: (netbird_effective_config.rc | default(1)) != 0
 
 - name: Resolve the requested NetBird management endpoint
@@ -74,7 +74,7 @@
 - name: Refuse automatic NetBird management service migration
   ansible.builtin.fail:
     msg: >-
-      NetBird is connected to '{{ netbird_effective_management_url }}', but
+      NetBird is configured for '{{ netbird_effective_management_url }}', but
       {{ netbird_requested_management_source }} requests
       '{{ netbird_requested_management_url }}'. Refusing to move an enrolled
       peer between management services automatically. Run `sudo netbird down`,
