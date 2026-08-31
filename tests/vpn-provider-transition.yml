@@ -36,6 +36,28 @@
       community.general.ufw:
         state: enabled
 
+    - name: Configure a fresh NetBird dry run
+      ansible.builtin.set_fact:
+        openclaw_vpn_provider: netbird
+        netbird_management_url: https://netbird.example.test
+
+    - name: Exercise fresh NetBird provisioning in check mode
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: netbird-linux
+        apply:
+          check_mode: true
+
+    - name: Assert pending NetBird repository setup is tolerated
+      ansible.builtin.assert:
+        that:
+          - netbird_repository.changed
+          - netbird_package_install.skipped | default(false)
+          - netbird_service.skipped | default(false)
+          - not (netbird_authenticated.skipped | default(false))
+          - (netbird_authenticated.rc | default(0)) != 0
+          - not (openclaw_selected_vpn_ready | bool)
+
     - name: Select NetBird for initial provisioning
       ansible.builtin.set_fact:
         openclaw_vpn_provider: netbird
@@ -211,6 +233,32 @@
     - name: Select Tailscale
       ansible.builtin.set_fact:
         openclaw_vpn_provider: tailscale
+
+    - name: Supply a placeholder key for a fresh Tailscale dry run
+      ansible.builtin.set_fact:
+        tailscale_authkey: tskey-auth-check-mode-placeholder
+
+    - name: Exercise fresh Tailscale provisioning in check mode
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: tailscale-linux
+        apply:
+          check_mode: true
+
+    - name: Assert pending Tailscale repository setup is tolerated
+      ansible.builtin.assert:
+        that:
+          - tailscale_repository.changed
+          - tailscale_package_install.skipped | default(false)
+          - tailscale_service.skipped | default(false)
+          - not (tailscale_status_linux.skipped | default(false))
+          - (tailscale_status_linux.rc | default(0)) != 0
+          - tailscale_join.skipped | default(false)
+          - not (openclaw_selected_vpn_ready | bool)
+
+    - name: Clear the fresh-run placeholder Tailscale auth key
+      ansible.builtin.set_fact:
+        tailscale_authkey: ""
 
     - name: Provision the real Tailscale package and daemon
       ansible.builtin.include_role:

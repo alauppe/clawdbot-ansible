@@ -7,6 +7,12 @@
       sudo netbird up{{ ' --management-url=' ~ (netbird_management_url | quote)
       if netbird_management_url | length > 0 else '' }}
 
+- name: Check whether NetBird is already installed
+  ansible.builtin.stat:
+    path: /usr/bin/netbird
+  register: netbird_executable
+  check_mode: false
+
 - name: Install NetBird repository prerequisites
   ansible.builtin.apt:
     name:
@@ -40,12 +46,19 @@
     name: netbird
     state: present
     update_cache: "{{ netbird_repository.changed }}"
+  register: netbird_package_install
+  when: >-
+    not ansible_check_mode
+    or netbird_executable.stat.exists
+    or not netbird_repository.changed
 
 - name: Enable and start NetBird
   ansible.builtin.systemd:
     name: netbird
     enabled: true
     state: started
+  register: netbird_service
+  when: not ansible_check_mode or netbird_executable.stat.exists
 
 - name: Check whether NetBird is connected and ready
   ansible.builtin.command:
