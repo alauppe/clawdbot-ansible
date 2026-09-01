@@ -543,9 +543,9 @@
       register: netbird_state_before_needs_login_drift
       changed_when: false
 
-    - name: Configure setup-key enrollment over a NeedsLogin profile
+    - name: Configure keyless reconnect over a NeedsLogin profile
       ansible.builtin.set_fact:
-        netbird_setup_key: setup-key-check-placeholder
+        netbird_setup_key: ""
         netbird_needs_login_endpoint_drift_rejected: false
 
     - name: Exercise NeedsLogin profile endpoint-drift rejection
@@ -583,7 +583,7 @@
         path: /tmp/openclaw-netbird-unexpected-up
       register: netbird_unexpected_up
 
-    - name: Assert NeedsLogin drift is rejected before re-enrollment
+    - name: Assert NeedsLogin drift is rejected before manual reconnect
       ansible.builtin.assert:
         that:
           - netbird_needs_login_endpoint_drift_rejected
@@ -722,6 +722,53 @@
       ansible.builtin.include_role:
         name: openclaw
         tasks_from: tailscale-linux
+
+    - name: Create a running-but-offline Tailscale fixture directory
+      ansible.builtin.file:
+        path: /tmp/openclaw-tailscale-offline-bin
+        state: directory
+        mode: '0755'
+
+    - name: Install the running-but-offline Tailscale fixture
+      ansible.builtin.copy:
+        dest: /tmp/openclaw-tailscale-offline-bin/tailscale
+        mode: '0755'
+        content: |
+          #!/bin/sh
+          if test "$1" = status && test "$2" = --json; then
+            cat <<'EOF'
+          {
+            "BackendState": "Running",
+            "Self": {"Online": false},
+            "Health": ["control plane is unreachable"]
+          }
+          EOF
+            exit 0
+          fi
+          exec /usr/bin/tailscale "$@"
+
+    - name: Exercise running-but-offline Tailscale readiness
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: tailscale-linux
+        apply:
+          environment:
+            PATH: >-
+              {{ '/tmp/openclaw-tailscale-offline-bin:'
+                 ~ ansible_env.PATH }}
+
+    - name: Assert offline Tailscale cannot retire the working VPN
+      ansible.builtin.assert:
+        that:
+          - tailscale_backend_state == 'Running'
+          - not (tailscale_self_online | bool)
+          - tailscale_health_issues | length == 1
+          - not (openclaw_selected_vpn_ready | bool)
+
+    - name: Remove the running-but-offline Tailscale fixture
+      ansible.builtin.file:
+        path: /tmp/openclaw-tailscale-offline-bin
+        state: absent
 
     - name: Record Tailscale service state before its auth-key dry run
       ansible.builtin.command:

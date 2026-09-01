@@ -81,6 +81,9 @@
 - name: Default Tailscale backend state when status is unavailable
   ansible.builtin.set_fact:
     tailscale_backend_state: "Unknown"
+    tailscale_self_online: false
+    tailscale_health_issues:
+      - Tailscale status is unavailable
 
 # `tailscale status --json` exits 0 whenever tailscaled is reachable, including
 # NeedsLogin and Stopped. Parse BackendState instead of treating rc=0 as joined.
@@ -94,6 +97,12 @@
         tailscale_backend_state: >-
           {{ (tailscale_status_linux.stdout | from_json).BackendState
              | default('Unknown') }}
+        tailscale_self_online: >-
+          {{ (tailscale_status_linux.stdout | from_json)
+             .get('Self', {}).get('Online', false) | bool }}
+        tailscale_health_issues: >-
+          {{ (tailscale_status_linux.stdout | from_json).Health
+             | default([], true) }}
   rescue:
     - name: Report unreadable Tailscale status
       ansible.builtin.debug:
@@ -158,6 +167,12 @@
         tailscale_backend_state: >-
           {{ (tailscale_status_after_join.stdout | from_json).BackendState
              | default('Unknown') }}
+        tailscale_self_online: >-
+          {{ (tailscale_status_after_join.stdout | from_json)
+             .get('Self', {}).get('Online', false) | bool }}
+        tailscale_health_issues: >-
+          {{ (tailscale_status_after_join.stdout | from_json).Health
+             | default([], true) }}
   rescue:
     - name: Report unreadable refreshed Tailscale status
       ansible.builtin.debug:
@@ -197,6 +212,21 @@
       `sudo tailscale status` and inspect the tailscaled service before retrying.
   when: tailscale_backend_state == 'Unknown'
 
+- name: Display guidance when Tailscale is running but unhealthy
+  ansible.builtin.debug:
+    msg: >-
+      Tailscale is running but the local peer is offline or reports health
+      problems. The previous VPN will be retained until `sudo tailscale
+      status` confirms this peer is online and healthy.
+  when:
+    - tailscale_backend_state == 'Running'
+    - >-
+      not (tailscale_self_online | bool)
+      or tailscale_health_issues | length > 0
+
 - name: Record whether selected Tailscale is ready
   ansible.builtin.set_fact:
-    openclaw_selected_vpn_ready: "{{ tailscale_backend_state == 'Running' }}"
+    openclaw_selected_vpn_ready: >-
+      {{ tailscale_backend_state == 'Running'
+         and tailscale_self_online | bool
+         and tailscale_health_issues | length == 0 }}

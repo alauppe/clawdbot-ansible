@@ -69,28 +69,10 @@
       {{ netbird_profile_candidates.results
          | map(attribute='stat.exists') | max }}
 
-- name: Read persisted NetBird profile enrollment status
-  ansible.builtin.command:
-    argv:
-      - timeout
-      - '15'
-      - netbird
-      - status
-  register: netbird_profile_status
-  check_mode: false
-  changed_when: false
-  failed_when: false
-  no_log: true
-  when: netbird_profile_preexisting | bool
-
 - name: Determine whether persisted endpoint validation is required
   ansible.builtin.set_fact:
     netbird_persisted_endpoint_validation_required: >-
-      {{ netbird_profile_preexisting | bool
-         and (netbird_setup_key | length > 0
-              or 'NeedsLogin' not in
-                 ((netbird_profile_status.stdout | default('')) ~
-                  (netbird_profile_status.stderr | default('')))) }}
+      {{ netbird_profile_preexisting | bool }}
 
 - name: Read the persisted NetBird profile before any service activity
   ansible.builtin.slurp:
