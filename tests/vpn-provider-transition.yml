@@ -105,6 +105,31 @@
       ansible.builtin.set_fact:
         netbird_repository_key_url: https://pkgs.netbird.io/debian/public.key
 
+    - name: Seed an unchanged NetBird repository from an interrupted attempt
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/netbird.list
+        content: >-
+          deb [signed-by=/usr/share/keyrings/netbird-archive-keyring.gpg]
+          https://pkgs.netbird.io/debian stable main
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Find cached NetBird package indexes
+      ansible.builtin.find:
+        paths: /var/lib/apt/lists
+        patterns: '*pkgs.netbird.io*'
+        file_type: file
+      register: cached_netbird_package_indexes
+
+    - name: Remove cached NetBird package indexes from the interrupted attempt
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ cached_netbird_package_indexes.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+
     - name: Select NetBird for initial provisioning
       ansible.builtin.set_fact:
         openclaw_vpn_provider: netbird
@@ -132,6 +157,8 @@
         that:
           - repaired_netbird_signing_key.rc == 0
           - netbird_signing_key.rc != 0
+          - not netbird_repository.changed
+          - netbird_package_install.changed
           - >-
             'fpr:::::::::EFE37DF047DF7CCDF1FC54FA83F79AD029778355:'
             in repaired_netbird_signing_key.stdout

@@ -232,7 +232,7 @@
   ansible.builtin.apt:
     name: netbird
     state: present
-    update_cache: "{{ netbird_repository.changed }}"
+    update_cache: "{{ not netbird_executable.stat.exists }}"
   register: netbird_package_install
   when: >-
     netbird_executable.stat.exists
