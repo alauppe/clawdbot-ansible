@@ -265,22 +265,6 @@
       ansible.builtin.set_fact:
         netbird_setup_key: ""
 
-    - name: Regenerate a disposable NetBird profile for drift tests
-      ansible.builtin.systemd:
-        name: netbird
-        state: restarted
-
-    - name: Seed a disposable local NetBird profile for drift tests
-      ansible.builtin.command:
-        argv:
-          - timeout
-          - '5'
-          - netbird
-          - up
-          - --management-url=https://127.0.0.1:1
-      changed_when: true
-      failed_when: false
-
     - name: Record NetBird service state before its dry run
       ansible.builtin.command:
         argv:
@@ -371,6 +355,22 @@
         that:
           - not welcome_injection_marker.stat.exists
           - openclaw_vpn_connect_command in literal_safe_welcome.stdout
+
+    - name: Regenerate a disposable NetBird profile for drift tests
+      ansible.builtin.systemd:
+        name: netbird
+        state: restarted
+
+    - name: Seed a disposable local NetBird profile for drift tests
+      ansible.builtin.command:
+        argv:
+          - timeout
+          - '5'
+          - netbird
+          - up
+          - --management-url=https://127.0.0.1:1
+      changed_when: true
+      failed_when: false
 
     - name: Default endpoint-drift rejection observation
       ansible.builtin.set_fact:
