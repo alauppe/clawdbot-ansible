@@ -143,14 +143,28 @@
       - gnupg
     state: present
 
-- name: Validate the installed NetBird GPG key
-  ansible.builtin.command:
-    argv:
-      - gpg
-      - --batch
-      - --show-keys
-      - /usr/share/keyrings/netbird-archive-keyring.gpg
+- name: Validate the installed NetBird GPG key fingerprint
+  ansible.builtin.shell:
+    cmd: |
+      set -o errexit -o nounset -o pipefail
+      netbird_key_fingerprints="$(
+        gpg --batch --with-colons --show-keys \
+          /usr/share/keyrings/netbird-archive-keyring.gpg 2>/dev/null | \
+          awk -F: '
+            $1 == "pub" { need_primary_fingerprint = 1; next }
+            need_primary_fingerprint && $1 == "fpr" {
+              print $10
+              need_primary_fingerprint = 0
+            }
+          '
+      )"
+      test "$netbird_key_fingerprints" = \
+        "$NETBIRD_EXPECTED_SIGNING_KEY_FINGERPRINT"
+    executable: /bin/bash
   register: netbird_signing_key
+  environment:
+    NETBIRD_EXPECTED_SIGNING_KEY_FINGERPRINT: >-
+      {{ netbird_repository_signing_key_fingerprint }}
   check_mode: false
   changed_when: false
   failed_when: false
@@ -159,16 +173,38 @@
   ansible.builtin.shell:
     cmd: |
       set -o errexit -o nounset -o pipefail
+      netbird_public_key_tmp="$(mktemp)"
       netbird_keyring_tmp="$(
         mktemp /usr/share/keyrings/.netbird-archive-keyring.gpg.XXXXXX
       )"
-      trap 'rm -f "$netbird_keyring_tmp"' EXIT
-      curl -fsSL https://pkgs.netbird.io/debian/public.key | \
-        gpg --dearmor > "$netbird_keyring_tmp"
+      trap 'rm -f "$netbird_public_key_tmp" "$netbird_keyring_tmp"' EXIT
+      curl -fsSL "$NETBIRD_SIGNING_KEY_URL" > "$netbird_public_key_tmp"
+      netbird_downloaded_fingerprints="$(
+        gpg --batch --with-colons --show-keys \
+          "$netbird_public_key_tmp" 2>/dev/null | \
+          awk -F: '
+            $1 == "pub" { need_primary_fingerprint = 1; next }
+            need_primary_fingerprint && $1 == "fpr" {
+              print $10
+              need_primary_fingerprint = 0
+            }
+          '
+      )"
+      if test "$netbird_downloaded_fingerprints" != \
+          "$NETBIRD_EXPECTED_SIGNING_KEY_FINGERPRINT"; then
+        echo "Downloaded NetBird signing key fingerprint mismatch" >&2
+        exit 1
+      fi
+      gpg --batch --yes --dearmor \
+        --output "$netbird_keyring_tmp" "$netbird_public_key_tmp"
       chmod 0644 "$netbird_keyring_tmp"
       mv -- "$netbird_keyring_tmp" \
         /usr/share/keyrings/netbird-archive-keyring.gpg
     executable: /bin/bash
+  environment:
+    NETBIRD_EXPECTED_SIGNING_KEY_FINGERPRINT: >-
+      {{ netbird_repository_signing_key_fingerprint }}
+    NETBIRD_SIGNING_KEY_URL: "{{ netbird_repository_key_url }}"
   changed_when: true
   when: (netbird_signing_key.rc | default(1)) != 0
 

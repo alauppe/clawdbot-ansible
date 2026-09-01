@@ -393,6 +393,10 @@ ansible-playbook playbook.yml --ask-become-pass \
   -e netbird_setup_key=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
 
+The NetBird Debian repository key is accepted only when its primary fingerprint
+matches the value pinned by this role. A valid but substituted OpenPGP key is
+rejected before it can replace the installed APT trust root.
+
 ## License
 
 MIT - see [LICENSE](LICENSE)

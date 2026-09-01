@@ -24,6 +24,10 @@ vpn_provider: ""  # "tailscale", "netbird", or ""
 netbird_setup_key: ""  # Optional: auto-connect during installation
 netbird_management_url: ""  # Empty selects NetBird Cloud; otherwise self-hosted URL
 netbird_connect_timeout: 60  # Seconds before an unattended join is stopped
+# NetBird's published Debian repository key. Keep the fingerprint pinned so a
+# valid but substituted OpenPGP key cannot become an APT trust root.
+netbird_repository_key_url: https://pkgs.netbird.io/debian/public.key
+netbird_repository_signing_key_fingerprint: EFE37DF047DF7CCDF1FC54FA83F79AD029778355
 
 # Node.js version
 nodejs_version: "22.x"

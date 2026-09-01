@@ -66,6 +66,45 @@
         group: root
         mode: '0644'
 
+    - name: Select a valid but unapproved OpenPGP key for the negative test
+      ansible.builtin.set_fact:
+        netbird_repository_key_url: >-
+          file:///usr/share/keyrings/ubuntu-archive-keyring.gpg
+        netbird_foreign_signing_key_rejected: false
+
+    - name: Prove a different valid signing key is rejected
+      block:
+        - name: Attempt NetBird provisioning with an unapproved signing key
+          ansible.builtin.include_role:
+            name: openclaw
+            tasks_from: netbird-linux
+      rescue:
+        - name: Record the expected signing-key rejection
+          ansible.builtin.set_fact:
+            netbird_foreign_signing_key_rejected: >-
+              {{
+                'fingerprint mismatch'
+                in (ansible_failed_result.stderr
+                    | default(ansible_failed_result.msg | default('')))
+              }}
+
+    - name: Read the keyring after the rejected signing-key download
+      ansible.builtin.slurp:
+        src: /usr/share/keyrings/netbird-archive-keyring.gpg
+      register: netbird_keyring_after_foreign_key
+
+    - name: Assert the foreign key was rejected before atomic promotion
+      ansible.builtin.assert:
+        that:
+          - netbird_foreign_signing_key_rejected | bool
+          - >-
+            netbird_keyring_after_foreign_key.content | b64decode ==
+            'interrupted-download'
+
+    - name: Restore the official NetBird signing-key source
+      ansible.builtin.set_fact:
+        netbird_repository_key_url: https://pkgs.netbird.io/debian/public.key
+
     - name: Select NetBird for initial provisioning
       ansible.builtin.set_fact:
         openclaw_vpn_provider: netbird
@@ -81,7 +120,9 @@
         argv:
           - gpg
           - --batch
+          - --with-colons
           - --show-keys
+          - --fingerprint
           - /usr/share/keyrings/netbird-archive-keyring.gpg
       register: repaired_netbird_signing_key
       changed_when: false
@@ -91,6 +132,9 @@
         that:
           - repaired_netbird_signing_key.rc == 0
           - netbird_signing_key.rc != 0
+          - >-
+            'fpr:::::::::EFE37DF047DF7CCDF1FC54FA83F79AD029778355:'
+            in repaired_netbird_signing_key.stdout
 
     - name: Assert self-hosted manual setup keeps its management endpoint
       ansible.builtin.assert:

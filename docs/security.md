@@ -28,6 +28,10 @@ Tailscale (41641/udp): ALLOW
 
 NetBird clients initiate connections outbound and do not require an inbound UFW
 port. NetBird manages access on its tunnel interface after connection.
+The role pins NetBird's Debian repository signing-key fingerprint, validates
+both an existing keyring and every downloaded replacement, and promotes a
+replacement atomically only after the signer matches. A different valid
+OpenPGP key is rejected and cannot become an APT trust root.
 
 Changing `vpn_provider` converges both daemon and firewall state without
 cutting off a working remote path. The role keeps the deselected VPN and its
