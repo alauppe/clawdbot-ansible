@@ -371,6 +371,20 @@ ansible-playbook playbook.yml --ask-become-pass \
 
 Existing inventories using `tailscale_enabled=true` remain supported.
 
+Upgrades from releases that generated passwordless `tailscale up *` and
+`tailscale down` rules stop before changing the existing sudoers policy. First
+verify independent administrator or root access, then acknowledge migration to
+the strict policy:
+
+```bash
+ansible-playbook playbook.yml --ask-become-pass \
+  -e tailscale_legacy_sudo_migration_acknowledged=true
+```
+
+If the OpenClaw account still needs daemon control, also select Tailscale and
+set `tailscale_operator_enabled=true` to use scoped operator delegation instead
+of wildcard passwordless sudo.
+
 #### NetBird Auto-Connect
 
 ```bash
