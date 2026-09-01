@@ -346,6 +346,60 @@
             --management-url=https://api.netbird.io:443'
             in netbird_cloud_endpoint_drift_message
 
+    - name: Record running but unhealthy NetBird state before validation
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - netbird.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: netbird_state_before_running_drift
+      changed_when: false
+
+    - name: Default running-profile drift rejection observation
+      ansible.builtin.set_fact:
+        netbird_running_endpoint_drift_rejected: false
+
+    - name: Exercise running but unhealthy profile endpoint-drift rejection
+      block:
+        - name: Run production provisioning over the unhealthy profile
+          ansible.builtin.include_role:
+            name: openclaw
+            tasks_from: netbird-linux
+      rescue:
+        - name: Record the expected running-profile drift refusal
+          ansible.builtin.set_fact:
+            netbird_running_endpoint_drift_rejected: true
+            netbird_running_endpoint_drift_message: >-
+              {{ ansible_failed_result.msg | default('') }}
+
+    - name: Record running but unhealthy NetBird state after validation
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - netbird.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: netbird_state_after_running_drift
+      changed_when: false
+
+    - name: Assert unhealthy profile drift is rejected before mutation
+      ansible.builtin.assert:
+        that:
+          - netbird_profile_preexisting | bool
+          - "'ActiveState=active' in netbird_state_before_running_drift.stdout"
+          - netbird_running_endpoint_drift_rejected
+          - >-
+            'NetBird is configured for' in
+            netbird_running_endpoint_drift_message
+          - >-
+            netbird_state_after_running_drift.stdout ==
+            netbird_state_before_running_drift.stdout
+
     - name: Stop and disable the existing NetBird profile fixture
       ansible.builtin.systemd:
         name: netbird

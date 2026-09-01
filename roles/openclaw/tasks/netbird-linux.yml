@@ -68,24 +68,9 @@
     netbird_profile_preexisting: >-
       {{ netbird_profile_candidates.results
          | map(attribute='stat.exists') | max }}
-
-- name: Check whether the NetBird service is already running
-  ansible.builtin.command:
-    argv:
-      - systemctl
-      - is-active
-      - netbird.service
-  register: netbird_service_before_provisioning
-  check_mode: false
-  changed_when: false
-  failed_when: false
-
-- name: Determine whether persisted endpoint validation is required
-  ansible.builtin.set_fact:
     netbird_persisted_endpoint_validation_required: >-
-      {{ netbird_profile_preexisting | bool
-         and ((netbird_service_before_provisioning.rc | default(1)) != 0
-              or netbird_setup_key | length > 0) }}
+      {{ netbird_profile_candidates.results
+         | map(attribute='stat.exists') | max }}
 
 - name: Read the persisted NetBird profile before any service activity
   ansible.builtin.slurp:
