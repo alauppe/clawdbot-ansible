@@ -345,6 +345,15 @@
     - (netbird_authenticated.rc | default(1)) != 0
     - netbird_setup_key | length == 0
 
+- name: Discard the newly generated unenrolled NetBird profile
+  ansible.builtin.file:
+    path: "{{ netbird_active_profile_path }}"
+    state: absent
+  when:
+    - not (netbird_profile_preexisting | bool)
+    - (netbird_authenticated.rc | default(1)) != 0
+    - netbird_setup_key | length == 0
+
 - name: Record whether selected NetBird is ready
   ansible.builtin.set_fact:
     openclaw_selected_vpn_ready: >-

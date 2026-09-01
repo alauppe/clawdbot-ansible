@@ -176,6 +176,95 @@
             --management-url=https://netbird.example.test'
             in netbird_manual_guidance.msg
 
+    - name: Check the keyless first-run NetBird profile path
+      ansible.builtin.stat:
+        path: /var/lib/netbird/default.json
+      register: netbird_keyless_profile
+
+    - name: Assert keyless setup did not retain an unenrolled Cloud profile
+      ansible.builtin.assert:
+        that:
+          - not netbird_keyless_profile.stat.exists
+
+    - name: Create a setup-key retry fixture directory
+      ansible.builtin.file:
+        path: /tmp/openclaw-netbird-setup-key-retry-bin
+        state: directory
+        mode: '0755'
+
+    - name: Install the setup-key retry fixture
+      ansible.builtin.copy:
+        dest: /tmp/openclaw-netbird-setup-key-retry-bin/netbird
+        mode: '0755'
+        content: |
+          #!/bin/sh
+          if test "$1" = status; then
+            echo 'Daemon status: NeedsLogin'
+            exit 1
+          fi
+          if test "$1" = up; then
+            touch /tmp/openclaw-netbird-setup-key-retry-attempted
+            exit 1
+          fi
+          exec /usr/bin/netbird "$@"
+
+    - name: Remove the setup-key retry observation marker
+      ansible.builtin.file:
+        path: /tmp/openclaw-netbird-setup-key-retry-attempted
+        state: absent
+
+    - name: Configure unattended retry after keyless setup
+      ansible.builtin.set_fact:
+        netbird_setup_key: setup-key-check-placeholder
+        netbird_setup_key_retry_failed: false
+
+    - name: Exercise setup-key retry after keyless setup
+      block:
+        - name: Run provisioning with the later setup key
+          ansible.builtin.include_role:
+            name: openclaw
+            tasks_from: netbird-linux
+            apply:
+              environment:
+                PATH: >-
+                  {{ '/tmp/openclaw-netbird-setup-key-retry-bin:'
+                     ~ ansible_env.PATH }}
+      rescue:
+        - name: Record the expected placeholder setup-key failure
+          ansible.builtin.set_fact:
+            netbird_setup_key_retry_failed: true
+            netbird_setup_key_retry_message: >-
+              {{ ansible_failed_result.msg | default('') }}
+
+    - name: Check whether the later setup key reached NetBird
+      ansible.builtin.stat:
+        path: /tmp/openclaw-netbird-setup-key-retry-attempted
+      register: netbird_setup_key_retry_attempted
+
+    - name: Assert keyless setup can converge on a setup-key rerun
+      ansible.builtin.assert:
+        that:
+          - netbird_setup_key_retry_failed
+          - netbird_setup_key_retry_attempted.stat.exists
+          - >-
+            'could not connect' in
+            (netbird_setup_key_retry_message | lower)
+          - >-
+            'NetBird is configured for' not in
+            netbird_setup_key_retry_message
+
+    - name: Remove the setup-key retry fixtures
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/openclaw-netbird-setup-key-retry-bin
+        - /tmp/openclaw-netbird-setup-key-retry-attempted
+
+    - name: Clear the setup-key retry fixture
+      ansible.builtin.set_fact:
+        netbird_setup_key: ""
+
     - name: Record NetBird service state before its dry run
       ansible.builtin.command:
         argv:
