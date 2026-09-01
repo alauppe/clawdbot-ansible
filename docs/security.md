@@ -47,7 +47,13 @@ installed but stopped Tailscale daemon is started temporarily for this check
 and returned to its stopped state even when reconciliation fails.
 The generated sudoers policy permits only read-only Tailscale diagnostics; it
 does not permit `tailscale up` or `tailscale down`, so it cannot bypass operator
-opt-out or recreate daemon-control authority.
+opt-out or recreate daemon-control authority. Earlier releases did grant those
+passwordless recovery commands. On upgrade, the role refuses to overwrite a
+managed sudoers file containing them until an administrator verifies an
+independent recovery path and sets
+`tailscale_legacy_sudo_migration_acknowledged: true`. Use scoped
+`tailscale_operator_enabled` delegation when the OpenClaw account still needs
+daemon control.
 
 ### Layer 2: Fail2ban (SSH Protection)
 

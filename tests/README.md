@@ -51,8 +51,9 @@ fresh `ubuntu-24.04` hosted runners. Do not run these on a persistent host:
   repeats reconciliation for idempotency.
 - `tailscale-operator-boundary.yml` uses a real Tailscale daemon and the
   production sudoers template to prove grant, revocation, preservation of a
-  different operator, stopped-daemon reconciliation, and rejection of a
-  sudo-based authority restore.
+  different operator, stopped-daemon reconciliation, explicit migration from
+  legacy wildcard sudo access, rejection of a sudo-based authority restore,
+  and revocation before a replacement provider fails validation.
 
 Neither test enrolls the runner in a private network or requires credentials.
 
