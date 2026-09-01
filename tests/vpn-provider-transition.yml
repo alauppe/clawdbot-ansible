@@ -265,6 +265,11 @@
       ansible.builtin.set_fact:
         netbird_setup_key: ""
 
+    - name: Reset the disposable NetBird session before drift tests
+      ansible.builtin.command: netbird down
+      changed_when: true
+      failed_when: false
+
     - name: Seed a disposable local NetBird profile for drift tests
       ansible.builtin.command:
         argv:
