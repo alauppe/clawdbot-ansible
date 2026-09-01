@@ -87,9 +87,10 @@
   ansible.builtin.set_fact:
     netbird_persisted_endpoint_validation_required: >-
       {{ netbird_profile_preexisting | bool
-         and 'NeedsLogin' not in
-             ((netbird_profile_status.stdout | default('')) ~
-              (netbird_profile_status.stderr | default(''))) }}
+         and (netbird_setup_key | length > 0
+              or 'NeedsLogin' not in
+                 ((netbird_profile_status.stdout | default('')) ~
+                  (netbird_profile_status.stderr | default('')))) }}
 
 - name: Read the persisted NetBird profile before any service activity
   ansible.builtin.slurp:

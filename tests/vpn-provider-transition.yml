@@ -400,6 +400,101 @@
             netbird_state_after_running_drift.stdout ==
             netbird_state_before_running_drift.stdout
 
+    - name: Create a NeedsLogin NetBird status fixture
+      ansible.builtin.file:
+        path: /tmp/openclaw-netbird-needs-login-bin
+        state: directory
+        mode: '0755'
+
+    - name: Install the NeedsLogin NetBird status fixture
+      ansible.builtin.copy:
+        dest: /tmp/openclaw-netbird-needs-login-bin/netbird
+        mode: '0755'
+        content: |
+          #!/bin/sh
+          if test "$1" = status; then
+            echo 'Daemon status: NeedsLogin'
+            exit 1
+          fi
+          if test "$1" = up; then
+            touch /tmp/openclaw-netbird-unexpected-up
+          fi
+          exec /usr/bin/netbird "$@"
+
+    - name: Remove the setup-key command observation marker
+      ansible.builtin.file:
+        path: /tmp/openclaw-netbird-unexpected-up
+        state: absent
+
+    - name: Record NetBird state before NeedsLogin validation
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - netbird.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: netbird_state_before_needs_login_drift
+      changed_when: false
+
+    - name: Configure setup-key enrollment over a NeedsLogin profile
+      ansible.builtin.set_fact:
+        netbird_setup_key: setup-key-check-placeholder
+        netbird_needs_login_endpoint_drift_rejected: false
+
+    - name: Exercise NeedsLogin profile endpoint-drift rejection
+      block:
+        - name: Run provisioning over the NeedsLogin profile
+          ansible.builtin.include_role:
+            name: openclaw
+            tasks_from: netbird-linux
+            apply:
+              environment:
+                PATH: >-
+                  {{ '/tmp/openclaw-netbird-needs-login-bin:'
+                     ~ ansible_env.PATH }}
+      rescue:
+        - name: Record the expected NeedsLogin profile drift refusal
+          ansible.builtin.set_fact:
+            netbird_needs_login_endpoint_drift_rejected: true
+            netbird_needs_login_endpoint_drift_message: >-
+              {{ ansible_failed_result.msg | default('') }}
+
+    - name: Record NetBird state after NeedsLogin validation
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - netbird.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: netbird_state_after_needs_login_drift
+      changed_when: false
+
+    - name: Check whether setup-key enrollment was attempted
+      ansible.builtin.stat:
+        path: /tmp/openclaw-netbird-unexpected-up
+      register: netbird_unexpected_up
+
+    - name: Assert NeedsLogin drift is rejected before re-enrollment
+      ansible.builtin.assert:
+        that:
+          - netbird_needs_login_endpoint_drift_rejected
+          - >-
+            'NetBird is configured for' in
+            netbird_needs_login_endpoint_drift_message
+          - not netbird_unexpected_up.stat.exists
+          - >-
+            netbird_state_after_needs_login_drift.stdout ==
+            netbird_state_before_needs_login_drift.stdout
+
+    - name: Remove the NeedsLogin NetBird status fixture
+      ansible.builtin.file:
+        path: /tmp/openclaw-netbird-needs-login-bin
+        state: absent
+
     - name: Stop and disable the existing NetBird profile fixture
       ansible.builtin.systemd:
         name: netbird
